@@ -1,0 +1,11 @@
+[package]
+name = "saha_lang"
+version = "0.1.0"
+authors = ["Otto Rask"]
+
+[dependencies]
+saha_tokenizer = { path = "../tokenizer" }
+saha_parser = { path = "../parser" }
+saha_lib = { path = "../lib" }
+saha_core = { path = "../core" }
+structopt = "0.2"
