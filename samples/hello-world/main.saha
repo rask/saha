@@ -1,0 +1,12 @@
+/// Application entrypoint.
+///
+/// All Saha applications require a main() function that returns an integer. The
+/// main() function takes no parameters.
+function main() integer
+{
+    var str hello_world_value = "Hello world!";
+    
+    print(value = hello_world_value);
+
+    return 0;
+}

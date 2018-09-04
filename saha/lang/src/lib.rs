@@ -13,8 +13,13 @@ extern crate structopt;
 mod cli;
 mod errors;
 
-use std::path::PathBuf;
-use saha_lib::errors::Error;
+use std::{
+    ffi::OsString,
+    path::PathBuf
+};
+
+use saha_lib::errors::{Error, ParseError};
+use saha_tokenizer::tokenize_source_file;
 use errors::{StartupError, StartupResult};
 
 /// Validate if the given interpreter entrypoint file is a valid file for usage.
@@ -23,14 +28,21 @@ use errors::{StartupError, StartupResult};
 ///
 /// -   File should exist in the filesystem
 /// -   File name should end with `.saha`
-fn validate_interpreter_entrypoint(entrypoint: PathBuf) -> StartupResult {
+fn validate_interpreter_entrypoint(entrypoint: &PathBuf) -> StartupResult {
     if entrypoint.exists() == false {
-        return Err(StartupError::new("Invalid entrypoint file, does not exist"));
+        return Err(StartupError::new("Invalid entrypoint file, does not exist", None));
     }
 
-    if entrypoint.ends_with(".saha") == false {
-        return Err(StartupError::new("Invalid entrypoint file, not a Saha file ending in `.saha`"));
+    if entrypoint.extension().unwrap_or(&OsString::new()) != "saha" {
+        return Err(StartupError::new("Invalid entrypoint file, not a Saha file ending in `.saha`", None));
     }
+
+    return Ok(());
+}
+
+/// Takes a source file path and tokenizes the contents.
+fn parse_saha_source(args: &cli::InterpreterArgs) -> Result<(), ParseError> {
+    let tokenized_source = tokenize_source_file(&args.entrypoint)?;
 
     return Ok(());
 }
@@ -52,10 +64,17 @@ fn validate_interpreter_entrypoint(entrypoint: PathBuf) -> StartupResult {
 pub fn run() -> i32 {
     let args: cli::InterpreterArgs = cli::get_cli_arguments();
 
-    let entrypoint_validation_result: StartupResult = validate_interpreter_entrypoint(args.entrypoint);
+    let entrypoint_validation_result: StartupResult = validate_interpreter_entrypoint(&args.entrypoint);
 
     if entrypoint_validation_result.is_err() {
-        eprintln!("{}", entrypoint_validation_result.err().unwrap().get_message());
+        eprintln!("{}", entrypoint_validation_result.err().unwrap().format());
+        return 1;
+    }
+
+    let parse_result = parse_saha_source(&args);
+
+    if parse_result.is_err() {
+        eprintln!("{}", parse_result.err().unwrap().format());
         return 1;
     }
 

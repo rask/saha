@@ -3,18 +3,19 @@
 //! This module defined the root interpreter error handling setup, and provides
 //! a few error types related to startup errors and similar.
 
-use saha_lib::errors::Error;
+use saha_lib::{
+    source::FilePosition,
+    errors::Error
+};
 
 pub struct StartupError {
-    name: String,
     message: String
 }
 
 impl Error for StartupError {
-    fn new(message: &str) -> Self {
+    fn new(message: &str, _pos: Option<FilePosition>) -> Self {
         return StartupError {
-            name: "StartupError".to_owned(),
-            message: message.to_owned()
+            message: message.to_owned(),
         };
     }
 
@@ -23,7 +24,11 @@ impl Error for StartupError {
     }
 
     fn get_name(&self) -> String {
-        return self.name.to_string();
+        return "StartupError".to_owned();
+    }
+
+    fn get_file_position(&self) -> Option<FilePosition> {
+        return None;
     }
 }
 
