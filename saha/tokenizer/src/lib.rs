@@ -12,7 +12,7 @@ mod lexemer;
 pub mod token;
 
 use std::path::PathBuf;
-use saha_lib::errors::{Error, ParseError};
+use saha_lib::errors::ParseError;
 use ::{
     lexemer::lexemize_source_file,
     token::Token

@@ -8,6 +8,8 @@ use saha_lib::{
     errors::Error
 };
 
+/// Errors that occur before any parsing begins are startup errors.
+#[derive(Debug)]
 pub struct StartupError {
     message: String
 }

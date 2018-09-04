@@ -6,13 +6,14 @@
 //! interpreter and implementation to conform to the overall error system of
 //! the language.
 
+use std::fmt::Debug;
 use ::source::FilePosition;
 
 /// Error trait
 ///
 /// Implement this trait for all structs that are to be used as error types when
 /// running Saha interpretation.
-pub trait Error {
+pub trait Error: Debug {
     /// Create a new error instance with a message text.
     fn new(message: &str, pos: Option<FilePosition>) -> Self;
 
@@ -47,6 +48,7 @@ pub trait Error {
 
 /// For parsing errors which may happen either during tokenization or during AST
 /// parsing.
+#[derive(Debug)]
 pub struct ParseError {
     message: String,
     file_position: Option<FilePosition>

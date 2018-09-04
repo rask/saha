@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 /// Marks a specific position inside a source code file.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FilePosition {
     pub path: PathBuf,
     pub line: isize,

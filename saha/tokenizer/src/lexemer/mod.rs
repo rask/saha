@@ -17,6 +17,7 @@ use saha_lib::{
 /// 
 /// A lexeme is a token source primitive. A lexeme can be a single symbol, a
 /// word, a string value, or maybe whitespace.
+#[derive(Debug)]
 pub enum Lexeme {
     /// If we encounter unparseable characters we create an `Unknown` lexeme from
     /// them.
@@ -27,9 +28,6 @@ pub enum Lexeme {
 
     /// Continuous passages of `a-zA-Z0-9_.` characters.
     Word(FilePosition, String),
-
-    /// A number value, e.g. `1`, `1.23`, `-12`, `-12.45`...
-    Number(FilePosition, String),
 
     /// Anything wrapped in `"` characters.
     String(FilePosition, String),
@@ -53,7 +51,6 @@ impl Lexeme {
             Lexeme::Unknown(f) => f.clone(),
             Lexeme::Symbol(f, ..) => f.clone(),
             Lexeme::Word(f, ..) => f.clone(),
-            Lexeme::Number(f, ..) => f.clone(),
             Lexeme::String(f, ..) => f.clone(),
             Lexeme::Comment(f, ..) => f.clone(),
             Lexeme::Whitespace(f, ..) => f.clone(),
@@ -70,9 +67,6 @@ pub type LexemizationResult = Result<Vec<Lexeme>, ParseError>;
 struct Lexemer<'a> {
     source_file: &'a PathBuf,
     source_string: String,
-    current_line: isize,
-    current_column: u32,
-    previous_character: Option<char>,
 }
 
 impl<'a> Lexemer<'a> {
@@ -81,9 +75,6 @@ impl<'a> Lexemer<'a> {
         return Lexemer {
             source_file: source_file,
             source_string: source_string,
-            current_line: 1,
-            current_column: 0,
-            previous_character: None,
         };
     }
 
@@ -103,7 +94,7 @@ impl<'a> Lexemer<'a> {
     /// Iterate over a string and collect Lexemes.
     fn lexemize(&mut self) -> LexemizationResult {
         let mut lexemes: Vec<Lexeme> = Vec::new();
-        let mut current_character_type: &'static str = "unknown";
+        let mut current_character_type: &'static str;
         let mut char_buffer: Vec<char> = Vec::new();
         let mut comment_buffer: Vec<char> = Vec::new();
         let mut string_buffer: Vec<char> = Vec::new();
@@ -112,10 +103,9 @@ impl<'a> Lexemer<'a> {
 
         let mut current_line = 1;
         let mut current_column = 0;
-        let mut previous_character: Option<char> = None;
 
         let mut comment_maybe_starts = false;
-        let mut comment_can_start = false;
+        let mut comment_can_start = true;
         let mut comment_is_open = false;
         let mut string_is_open = false;
 
@@ -319,8 +309,6 @@ impl<'a> Lexemer<'a> {
                     comment_can_start = false;
                 }
             }
-
-            previous_character = Some(current_character.to_owned());
         }
 
         // In case we have a char buffer that is not empty by the end.
