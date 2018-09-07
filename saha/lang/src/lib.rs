@@ -14,6 +14,7 @@ mod cli;
 mod errors;
 
 use std::{
+    env::current_dir,
     ffi::OsString,
     path::PathBuf
 };
@@ -42,7 +43,23 @@ fn validate_interpreter_entrypoint(entrypoint: &PathBuf) -> StartupResult {
 
 /// Takes a source file path and tokenizes the contents.
 fn parse_saha_source(args: &cli::InterpreterArgs) -> Result<(), ParseError> {
-    let tokenized_source = tokenize_source_file(&args.entrypoint)?;
+    let mut entrypoint = args.entrypoint.to_owned();
+
+    if entrypoint.is_absolute() == false {
+        let dir = current_dir();
+
+        match dir {
+            Ok(mut d) => {
+                d.push(entrypoint);
+                entrypoint = d;
+            },
+            Err(_) => {
+                return Err(ParseError::new("Unable to parse current working directory for entrypoint", None))
+            }
+        };
+    }
+
+    let tokenized_source = tokenize_source_file(&entrypoint)?;
 
     return Ok(());
 }

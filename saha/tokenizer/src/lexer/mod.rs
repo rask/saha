@@ -436,6 +436,10 @@ impl<'a> Lexer<'a> {
 }
 
 /// Lexemize a source file.
+///
+/// Takes in a PathBuf which is read and then passed into a lexer. A path is
+/// required to let the lexer know what file it is working on when generating
+/// `FilePosition` data for the source code being lexed.
 pub fn lexemize_source_file(file: &PathBuf) -> LexemizationResult {
     let null_pos = FilePosition {
         path: file.to_owned(),
@@ -449,7 +453,7 @@ pub fn lexemize_source_file(file: &PathBuf) -> LexemizationResult {
     };
 
     if source_string.len() < 1 {
-        return Err(ParseError::new(&format!("Could not read empty file: `{:?}`", file), Some(null_pos.clone())));
+        return Err(ParseError::new(&format!("Cannot parse empty file: `{:?}`", file), Some(null_pos.clone())));
     }
 
     let mut lexer = Lexer::new(&file, source_string);
