@@ -1,5 +1,5 @@
 //! Saha Tokenizer Library
-//! 
+//!
 //! Takes in a source file or a source string and tokenizes it. First we parse
 //! lexemes, after which we parse tokens from the lexemes. During tokenization
 //! all filepath includes (`use` statements) are inlined and aliased properly
@@ -8,13 +8,13 @@
 extern crate saha_lib;
 extern crate noisy_float;
 
-mod lexemer;
+mod lexer;
 pub mod token;
 
 use std::path::PathBuf;
 use saha_lib::errors::ParseError;
 use ::{
-    lexemer::lexemize_source_file,
+    lexer::lexemize_source_file,
     token::Token
 };
 
