@@ -9,18 +9,20 @@ extern crate saha_lib;
 extern crate noisy_float;
 
 mod lexer;
+mod tokenizer;
 pub mod token;
 
 use std::path::PathBuf;
 use saha_lib::errors::ParseError;
 use ::{
     lexer::lexemize_source_file,
+    tokenizer::tokenize_lexemes,
     token::Token
 };
 
-pub fn tokenize_source_file(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
-    let lexemes = lexemize_source_file(&file);
-    let tokens: Vec<Token> = Vec::new();
+pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
+    let mut lexemes = lexemize_source_file(file)?;
+    let tokens: Vec<Token> = tokenize_lexemes(lexemes)?;
 
     return Ok(tokens);
 }

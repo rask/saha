@@ -1,5 +1,5 @@
 //! Token
-//! 
+//!
 //! Token is a language specific string of characters that are used to parse
 //! together an abstract syntax tree. Tokens are parsed from lexemes.
 
@@ -7,12 +7,13 @@ use noisy_float::prelude::*;
 use saha_lib::source::FilePosition;
 
 /// A single tokenized piece of Saha source code.
+#[derive(PartialEq)]
 pub enum Token {
     /// An inline comment.
     Comment(FilePosition, String),
 
     /// A name reference value. E.g. function names, variable names, class
-    /// names, property names, etc. Contains and aliased version of said name,
+    /// names, property names, etc. Contains an aliased version of said name,
     /// along with a pure source representation of said name as well.
     Name(FilePosition, String, String),
 
@@ -60,7 +61,7 @@ pub enum Token {
 
     /// `}` character.
     CurlyClose(FilePosition),
-    
+
     /// Any unspecified character that does not fit anywhere else. Most probably
     /// leads to a parse error at some point during execution.
     Symbol(FilePosition, char),
@@ -74,7 +75,7 @@ pub enum Token {
     /// Import with `use` keyword, denotes imports from other codebases. First
     /// String is the actual module and member, second string is an alias
     /// declared for the import using the `as` keyword.
-    Use(FilePosition, String, String),
+    Import(FilePosition, String, String),
 
     /// End of file.
     Eof(FilePosition),
