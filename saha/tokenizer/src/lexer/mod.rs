@@ -49,6 +49,7 @@ pub enum Lexeme {
 }
 
 impl Lexeme {
+    /// Get the source file position of a lexeme.
     pub fn get_file_position(&self) -> FilePosition {
         return match self {
             Lexeme::Unknown(f) => f.clone(),
@@ -60,6 +61,23 @@ impl Lexeme {
             Lexeme::Whitespace(f, ..) => f.clone(),
             Lexeme::Newline(f, ..) => f.clone(),
             Lexeme::Eof(f) => f.clone(),
+        };
+    }
+
+    /// Compare if Lexeme variant and the contained string matches.
+    pub fn compare_str(&self, string: &str) -> bool {
+        let os = string.to_string();
+
+        return match self {
+            Lexeme::Unknown(..) => false,
+            Lexeme::Symbol(_, s) => *s == os,
+            Lexeme::Word(_, s) => *s == os,
+            Lexeme::Number(_, s) => *s == os,
+            Lexeme::String(_, s) => *s == os,
+            Lexeme::Comment(_, s) => false,
+            Lexeme::Whitespace(..) => false,
+            Lexeme::Newline(..) => false,
+            Lexeme::Eof(..) => false,
         };
     }
 }

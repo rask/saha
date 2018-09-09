@@ -7,15 +7,13 @@ use noisy_float::prelude::*;
 use saha_lib::source::FilePosition;
 
 /// A single tokenized piece of Saha source code.
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    /// An inline comment.
-    Comment(FilePosition, String),
-
     /// A name reference value. E.g. function names, variable names, class
     /// names, property names, etc. Contains an aliased version of said name,
     /// along with a pure source representation of said name as well.
     Name(FilePosition, String, String),
+    //                 ^ alias ^ source repr
 
     /// `=` character.
     Assign(FilePosition),
@@ -37,6 +35,12 @@ pub enum Token {
 
     /// `?` character.
     QuestionMark(FilePosition),
+
+    /// '&' character.
+    Ampersand(FilePosition),
+
+    /// '|' character.
+    Pipe(FilePosition),
 
     /// `'` character.
     SingleQuote(FilePosition),
@@ -61,16 +65,6 @@ pub enum Token {
 
     /// `}` character.
     CurlyClose(FilePosition),
-
-    /// Any unspecified character that does not fit anywhere else. Most probably
-    /// leads to a parse error at some point during execution.
-    Symbol(FilePosition, char),
-
-    /// `\n`
-    Newline(FilePosition),
-
-    /// Any horizontal whitespace.
-    Whitespace(FilePosition, String),
 
     /// Import with `use` keyword, denotes imports from other codebases. First
     /// String is the actual module and member, second string is an alias
@@ -235,4 +229,80 @@ pub enum Token {
 
     /// `raise` keyword.
     KwRaise(FilePosition),
+}
+
+impl Token {
+    /// Get the source file position of a token.
+    pub fn get_file_position(&self) -> FilePosition {
+        return match self {
+            Token::Name(f, ..) => f.clone(),
+            Token::Assign(f, ..) => f.clone(),
+            Token::ObjectAccess(f, ..) => f.clone(),
+            Token::StaticAccess(f, ..) => f.clone(),
+            Token::Comma(f, ..) => f.clone(),
+            Token::Colon(f, ..) => f.clone(),
+            Token::Negation(f, ..) => f.clone(),
+            Token::QuestionMark(f, ..) => f.clone(),
+            Token::SingleQuote(f, ..) => f.clone(),
+            Token::Ampersand(f, ..) => f.clone(),
+            Token::Pipe(f, ..) => f.clone(),
+            Token::EndStatement(f, ..) => f.clone(),
+            Token::ParensOpen(f, ..) => f.clone(),
+            Token::ParensClose(f, ..) => f.clone(),
+            Token::BraceOpen(f, ..) => f.clone(),
+            Token::BraceClose(f, ..) => f.clone(),
+            Token::CurlyOpen(f, ..) => f.clone(),
+            Token::CurlyClose(f, ..) => f.clone(),
+            Token::Import(f, ..) => f.clone(),
+            Token::Eof(f, ..) => f.clone(),
+            Token::Eob => FilePosition::unknown(),
+            Token::StringValue(f, ..) => f.clone(),
+            Token::IntegerValue(f, ..) => f.clone(),
+            Token::FloatValue(f, ..) => f.clone(),
+            Token::BooleanValue(f, ..) => f.clone(),
+            Token::TypeBoolean(f, ..) => f.clone(),
+            Token::TypeDictionary(f, ..) => f.clone(),
+            Token::TypeFloat(f, ..) => f.clone(),
+            Token::TypeInteger(f, ..) => f.clone(),
+            Token::TypeList(f, ..) => f.clone(),
+            Token::TypeString(f, ..) => f.clone(),
+            Token::OpAdd(f, ..) => f.clone(),
+            Token::OpSub(f, ..) => f.clone(),
+            Token::OpDiv(f, ..) => f.clone(),
+            Token::OpMul(f, ..) => f.clone(),
+            Token::OpEq(f, ..) => f.clone(),
+            Token::OpNeq(f, ..) => f.clone(),
+            Token::OpGt(f, ..) => f.clone(),
+            Token::OpGte(f, ..) => f.clone(),
+            Token::OpLt(f, ..) => f.clone(),
+            Token::OpLte(f, ..) => f.clone(),
+            Token::OpAnd(f, ..) => f.clone(),
+            Token::OpOr(f, ..) => f.clone(),
+            Token::KwUse(f, ..) => f.clone(),
+            Token::KwAs(f, ..) => f.clone(),
+            Token::KwClass(f, ..) => f.clone(),
+            Token::KwBehavior(f, ..) => f.clone(),
+            Token::KwVar(f, ..) => f.clone(),
+            Token::KwProperty(f, ..) => f.clone(),
+            Token::KwConstant(f, ..) => f.clone(),
+            Token::KwStatic(f, ..) => f.clone(),
+            Token::KwReturn(f, ..) => f.clone(),
+            Token::KwNew(f, ..) => f.clone(),
+            Token::KwFor(f, ..) => f.clone(),
+            Token::KwIn(f, ..) => f.clone(),
+            Token::KwLoop(f, ..) => f.clone(),
+            Token::KwIf(f, ..) => f.clone(),
+            Token::KwElseif(f, ..) => f.clone(),
+            Token::KwElse(f, ..) => f.clone(),
+            Token::KwImplements(f, ..) => f.clone(),
+            Token::KwFunction(f, ..) => f.clone(),
+            Token::KwMethod(f, ..) => f.clone(),
+            Token::KwPublic(f, ..) => f.clone(),
+            Token::KwContinue(f, ..) => f.clone(),
+            Token::KwBreak(f, ..) => f.clone(),
+            Token::KwTry(f, ..) => f.clone(),
+            Token::KwCatch(f, ..) => f.clone(),
+            Token::KwRaise(f, ..) => f.clone(),
+        };
+    }
 }

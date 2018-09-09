@@ -26,4 +26,12 @@ impl FilePosition {
             column: 0
         };
     }
+
+    pub fn shift_col(&self, shift: i32) -> FilePosition {
+        return FilePosition {
+            path: self.path.clone(),
+            line: self.line.clone(),
+            column: self.column + shift as u32
+        };
+    }
 }
