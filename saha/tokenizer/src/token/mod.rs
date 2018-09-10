@@ -6,6 +6,8 @@
 use noisy_float::prelude::*;
 use saha_lib::source::FilePosition;
 
+use ::imports::Import;
+
 /// A single tokenized piece of Saha source code.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -66,10 +68,8 @@ pub enum Token {
     /// `}` character.
     CurlyClose(FilePosition),
 
-    /// Import with `use` keyword, denotes imports from other codebases. First
-    /// String is the actual module and member, second string is an alias
-    /// declared for the import using the `as` keyword.
-    Import(FilePosition, String, String),
+    /// Import with `use` keyword, denotes imports from other codebases.
+    Import(FilePosition, Import),
 
     /// End of file.
     Eof(FilePosition),

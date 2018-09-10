@@ -14,7 +14,8 @@ use saha_lib::{
 };
 
 use ::{
-    lexer::{lexemize_source_file, Lexeme},
+    imports::Import,
+    lexer::Lexeme,
     token::Token
 };
 
@@ -24,16 +25,244 @@ type TokenizationResult = Result<Vec<Token>, ParseError>;
 /// Tokenizer
 ///
 /// Manages the tokenization of source files.
-pub struct Tokenizer {
+pub struct Tokenizer<'a> {
+    main_file: &'a PathBuf,
     lexemes: Vec<Lexeme>
 }
 
-impl Tokenizer {
+impl<'a> Tokenizer<'a> {
     /// Get a new tokenizer for a source file.
-    pub fn new(lexemes: Vec<Lexeme>) -> Tokenizer {
+    pub fn new(lexemes: Vec<Lexeme>, main_file: &PathBuf) -> Tokenizer {
         return Tokenizer {
+            main_file: main_file,
             lexemes: lexemes
         };
+    }
+
+    /// Parse import name and path.
+    ///
+    /// For `project.` and `vendor.` imports, we try to find an actual file to load. For other types
+    /// we just return none as the parser will use internal symbol routing to find the imported
+    /// members.
+    ///
+    /// For `project.` imports we look for files in the same working directory as the "main" Saha
+    /// file is.
+    ///
+    /// For `vendor.` imports we move one directory up from the "main" file directory and look from
+    /// a "vendor" subdirectory there.
+    ///
+    /// What above means is that we encourage the following directory structure for projects:
+    ///
+    /// ```text
+    /// project/
+    /// |
+    /// +-- src/
+    /// |   |
+    /// |   +-- main.saha
+    /// |   +-- lib.saha
+    /// |   +-- ...
+    /// |
+    /// +-- vendor/
+    /// |   |
+    /// |   +-- vendor1/
+    /// |   +-- vendor2/
+    /// |   +-- ...
+    /// |
+    /// +-- .gitignore
+    /// +-- README.md
+    /// +-- ...
+    /// ```
+    ///
+    /// It is opinionated but keeps things tidier and as said, encourages a single approach to
+    /// vendoring in the ecosystem.
+    ///
+    /// Assuming we are importing a name called
+    ///
+    /// ```saha
+    /// // /my/project/src/main.saha
+    /// use project.my_module.hello_world;
+    /// ```
+    ///
+    /// We will look for the `hello_world` function or other member in the following path:
+    ///
+    /// ```text
+    /// /my/project/src/my_module.saha
+    /// ```
+    ///
+    /// And if we want to import
+    ///
+    /// ```saha
+    /// use vendor.acme_company.acme_lib.libfile.AcmeClass;
+    /// ```
+    ///
+    /// We will be looking for the class `AcmeClass` inside:
+    ///
+    /// ```text
+    /// /my/project/vendor/acme_company/acme_lib/libfile.saha
+    /// ```
+    fn parse_import_path_names(&self, namepos: &FilePosition, name: String) -> Result<(String, Option<PathBuf>), ParseError> {
+        if name.contains('.') == false {
+            return Err(ParseError::new("Invalid `use` member, must be namespaced", Some(namepos.to_owned())));
+        }
+
+        let mut name_parts: Vec<&str> = name.split('.').collect();
+        let member = name_parts.pop().unwrap();
+
+        if name.starts_with("project.") || name.starts_with("vendor.") {
+            // we are looking at a filepath based import
+            let mut project_root = self.main_file.clone();
+            project_root.pop(); // pop the main file of the project
+
+            if name.starts_with("vendor.") {
+                // vendor dir is situated in the directory above the main file, inside a `vendor` dir
+                project_root.pop();
+                project_root.push("vendor");
+            } else {
+                name_parts.remove(0); // remove the starting `project` to make it inferred instead
+            }
+
+            let mut import_member_path = name_parts.join("/");
+
+            project_root.push(import_member_path);
+            project_root.set_extension("saha");
+
+            if project_root.exists() == false {
+                return Err(ParseError::new(&format!("Invalid `use`, imported file `{:?}` does not exist", project_root), Some(namepos.to_owned())));
+            }
+
+            return Ok((member.to_string(), Some(project_root)));
+        }
+
+        // std and ext imports do not use filesystem paths but internal routing instead
+        return Ok((member.to_string(), None));
+    }
+
+    /// Get the import type for an import name source string.
+    fn get_import_type(&self, import_source_string: &String) -> &str {
+        if import_source_string.starts_with("project.") {
+            return "project";
+        } else if import_source_string.starts_with("vendor.") {
+            return "vendor";
+        } else if import_source_string.starts_with("std.") {
+            return "std";
+        } else if import_source_string.starts_with("ext.") {
+            return "ext";
+        } else {
+            return "";
+        }
+    }
+
+    /// Parse use keywords to imports.
+    fn parse_imports(&self, tokens: Vec<Token>) -> TokenizationResult {
+        let mut iterable = tokens.iter().peekable();
+        let mut parsed: Vec<Token> = Vec::new();
+        let mut names_to_alias: Vec<String> = Vec::new();
+
+        loop {
+            let current_token_maybe = iterable.next();
+
+            if current_token_maybe.is_none() {
+                break;
+            }
+
+            let current_token = current_token_maybe.unwrap();
+
+            match current_token {
+                Token::KwUse(use_pos) => {
+                    let use_name_maybe = iterable.next();
+
+                    if use_name_maybe.is_none() {
+                        return Err(ParseError::new("Expected name after `use` keyword", Some(use_pos.to_owned())));
+                    }
+
+                    let use_name = use_name_maybe.unwrap();
+
+                    match use_name {
+                        Token::Name(pos, _, source) => {
+                            // `source` contains the whole import name
+                            let import_type = self.get_import_type(&source);
+                            let import_name: String; // the member we're importing
+                            let mut import_alias: String; // alias with `as` possibly
+                            let import_path: Option<PathBuf>; // file path we're importing from
+
+                            match import_type {
+                                "project" | "vendor" | "std" | "ext" => (), // "ok"
+                                _ => return Err(ParseError::new("Invalid import type encountered, expected `project`, `vendor`, `std`, or `ext`", Some(pos.to_owned())))
+                            };
+
+                            let (import_name, import_path) = self.parse_import_path_names(&pos, source.to_string())?;
+
+                            // we need to peek to make sure we have either a bare import or an
+                            // aliased import, or perhaps a parse error
+                            let mut peeked_token: Option<Token>;
+
+                            // do the following inside a block to keep reference lifetimes in tick
+                            {
+                                peeked_token = match iterable.peek().clone() {
+                                    Some(t) => Some(t.to_owned().to_owned()),
+                                    None => None
+                                };
+                            }
+
+                            let import_definition: Import = match peeked_token {
+                                Some(t) => match t {
+                                    Token::EndStatement(..) => {
+                                        iterable.next();
+
+                                        names_to_alias.push(import_name.clone());
+
+                                        match import_type {
+                                            "project" => Import::Project(source.to_owned(), import_name, import_path.unwrap()),
+                                            "vendor" => Import::Vendor(source.to_owned(), import_name, import_path.unwrap()),
+                                            "std" => Import::Std(source.to_owned(), import_name),
+                                            "ext" => Import::Ext(source.to_owned(), import_name),
+                                            _ => unreachable!()
+                                        }
+                                    }
+                                    Token::KwAs(..) => {
+                                        // parse import name aliasing
+                                        let askw = iterable.next().unwrap(); // skip the `as`
+
+                                        let aliased_name = iterable.next();
+
+                                        if aliased_name.is_none() {
+                                            return Err(ParseError::new("Expected name after `as`", Some(askw.get_file_position())));
+                                        }
+
+                                        import_alias = match aliased_name.unwrap() {
+                                            Token::Name(_, _, alias_source) => alias_source.to_owned(),
+                                            _ => return Err(ParseError::new("Expected name after `as`", Some(askw.get_file_position())))
+                                        };
+
+                                        names_to_alias.push(import_alias.clone());
+
+                                        match import_type {
+                                            "project" => Import::Project(source.to_owned(), import_alias, import_path.unwrap()),
+                                            "vendor" => Import::Vendor(source.to_owned(), import_alias, import_path.unwrap()),
+                                            "std" => Import::Std(source.to_owned(), import_alias),
+                                            "ext" => Import::Ext(source.to_owned(), import_alias),
+                                            _ => unreachable!()
+                                        }
+                                    },
+                                    _ => return Err(ParseError::new("Expected `as` or `;`", Some(t.get_file_position())))
+                                },
+                                _ => {
+                                    return Err(ParseError::new("Expected `as` or `;`", Some(pos.to_owned())));
+                                }
+                            };
+
+                            parsed.push(Token::Import(use_pos.to_owned(), import_definition));
+                        },
+                        _ => {
+                            return Err(ParseError::new("Expected name after `use` keyword", Some(use_pos.to_owned())));
+                        }
+                    }
+                },
+                _ => parsed.push(current_token.to_owned())
+            };
+        }
+
+        return Ok(parsed);
     }
 
     /// When the self instance is ready, we can tokenize.
@@ -41,9 +270,8 @@ impl Tokenizer {
         let mut tokens: Vec<Token> = Vec::new();
 
         let lexemes = self.lexemes.to_owned();
-        let mut prev_lexeme: Option<Lexeme> = None;
-        let mut prev_symbol: String = "a".to_string(); // default this to non-symbol so we don't break anything
         let mut prev_pos: Option<FilePosition> = None;
+        let mut prev_symbol: String = "a".to_string(); // default this to non-symbol so we don't break anything
 
         for current_lexeme in lexemes {
             match current_lexeme {
@@ -128,24 +356,17 @@ impl Tokenizer {
 
                         // combinable symbols, we need to check back to see if we need to combine
                         "=" => {
-                            if &prev_symbol == "=" {
+                            if ["=", "!", "<", ">"].contains(&prev_symbol.as_str()) {
                                 allow_prev_use = false;
                                 tokens.pop();
-                                Token::OpEq(fp.shift_col(-1))
-                            } else if &prev_symbol == "!" {
-                                allow_prev_use = false;
-                                tokens.pop();
-                                Token::OpNeq(fp.shift_col(-1))
-                            } else if &prev_symbol == "<" {
-                                allow_prev_use = false;
-                                tokens.pop();
-                                Token::OpLte(fp.shift_col(-1))
-                            } else if &prev_symbol == ">" {
-                                allow_prev_use = false;
-                                tokens.pop();
-                                Token::OpGte(fp.shift_col(-1))
-                            } else {
-                                Token::Assign(fp)
+                            }
+
+                            match &prev_symbol as &str {
+                                "=" => Token::OpEq(fp.shift_col(-1)),
+                                "!" => Token::OpNeq(fp.shift_col(-1)),
+                                "<" => Token::OpLte(fp.shift_col(-1)),
+                                ">" => Token::OpGte(fp.shift_col(-1)),
+                                _ => Token::Assign(fp),
                             }
                         },
                         "&" => {
@@ -241,15 +462,18 @@ impl Tokenizer {
                 }
             };
 
+            prev_pos = Some(current_lexeme.get_file_position());
         }
 
-        return Ok(tokens);
+        let imports_parsed = self.parse_imports(tokens)?;
+
+        return Ok(imports_parsed);
     }
 }
 
 /// Tokenize a Saha source file that has been lexemized.
-pub fn tokenize_lexemes(lexemes: Vec<Lexeme>) -> TokenizationResult {
-    let mut tokenizer = Tokenizer::new(lexemes);
+pub fn tokenize_lexemes(lexemes: Vec<Lexeme>, main_file: &PathBuf) -> TokenizationResult {
+    let mut tokenizer = Tokenizer::new(lexemes, main_file);
 
     return tokenizer.tokenize();
 }
@@ -257,6 +481,7 @@ pub fn tokenize_lexemes(lexemes: Vec<Lexeme>) -> TokenizationResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env::current_dir;
 
     fn testfilepos() -> FilePosition {
         return FilePosition {
@@ -266,18 +491,27 @@ mod tests {
         };
     }
 
+    fn get_test_sample_file(sample_path: &str) -> PathBuf {
+        let mut path = current_dir().unwrap(); // TODO does this work
+        path.push("tests/samples");
+        path.push(sample_path);
+
+        return path;
+    }
+
+    fn get_test_main_file() -> PathBuf {
+        return get_test_sample_file("src/main.saha");
+    }
+
+    fn create_testfile() -> bool {
+        return false;
+    }
+
     #[test]
     fn test_tokenizer_tokenizes_basic_sources() {
+        let testpath: PathBuf = get_test_main_file();
+
         let lexemes = vec![
-            Lexeme::Word(testfilepos(), "use".to_string()),
-            Lexeme::Whitespace(testfilepos(), " ".to_string()),
-            Lexeme::Word(testfilepos(), "foo.bar.baz".to_string()),
-            Lexeme::Whitespace(testfilepos(), " ".to_string()),
-            Lexeme::Word(testfilepos(), "as".to_string()),
-            Lexeme::Whitespace(testfilepos(), " ".to_string()),
-            Lexeme::Word(testfilepos(), "FoobarBaz".to_string()),
-            Lexeme::Symbol(testfilepos(), ";".to_string()),
-            Lexeme::Newline(testfilepos()),
             Lexeme::Word(testfilepos(), "foo".to_string()),
             Lexeme::Whitespace(testfilepos(), " ".to_string()),
             Lexeme::Symbol(testfilepos(), "&".to_string()),
@@ -291,12 +525,10 @@ mod tests {
             Lexeme::Symbol(testfilepos(), ";".to_string()),
         ];
 
+        let first_import = Import::Project("project.bar.hello_world".to_string(), "hello_world".to_string(), PathBuf::from(""));
+        let second_import = Import::Std("std.bar.baz".to_string(), "FoobarBaz".to_string());
+
         let expected = vec![
-            Token::KwUse(testfilepos()),
-            Token::Name(testfilepos(), "foo.bar.baz".to_string(), "foo.bar.baz".to_string()),
-            Token::KwAs(testfilepos()),
-            Token::Name(testfilepos(), "FoobarBaz".to_string(), "FoobarBaz".to_string()),
-            Token::EndStatement(testfilepos()),
             Token::Name(testfilepos(), "foo".to_string(), "foo".to_string()),
             Token::OpAnd(testfilepos().shift_col(-1)),
             Token::IntegerValue(testfilepos(), 123 as isize),
@@ -305,11 +537,111 @@ mod tests {
             Token::EndStatement(testfilepos()),
         ];
 
-        let mut tokenizer = Tokenizer::new(lexemes);
+        let mut tokenizer = Tokenizer::new(lexemes, &testpath);
 
         let tokens = tokenizer.tokenize();
         let printtok = tokenizer.tokenize();
 
+        println!("{:?}", expected);
+        println!("{:?}", printtok.unwrap());
+
         assert!(tokens.unwrap() == expected);
+    }
+
+    #[test]
+    fn test_it_tokenizes_imports_properly() {
+        let testpath: PathBuf = get_test_main_file();
+
+        let proj_lexemes = vec![
+            Lexeme::Word(testfilepos(), "use".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "project.mymod.HelloWorld".to_string()),
+            Lexeme::Symbol(testfilepos(), ";".to_string()),
+        ];
+
+        let std_lexemes = vec![
+            Lexeme::Word(testfilepos(), "use".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "std.coremod.Foobar".to_string()),
+            Lexeme::Symbol(testfilepos(), ";".to_string()),
+        ];
+
+        let proj_aliased_lexemes = vec![
+            Lexeme::Word(testfilepos(), "use".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "project.mymod.HelloWorld".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "as".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "HiyaWorld".to_string()),
+            Lexeme::Symbol(testfilepos(), ";".to_string()),
+        ];
+
+        let mut proj_tokenizer = Tokenizer::new(proj_lexemes, &testpath);
+        let mut std_tokenizer = Tokenizer::new(std_lexemes, &testpath);
+        let mut proj_alias_tokenizer = Tokenizer::new(proj_aliased_lexemes, &testpath);
+
+        let projtokens = proj_tokenizer.tokenize();
+        let stdtokens = std_tokenizer.tokenize();
+        let projaliastokens = proj_alias_tokenizer.tokenize();
+
+        let expected_proj_import = Import::Project(
+            "project.mymod.HelloWorld".to_string(),
+            "HelloWorld".to_string(),
+            get_test_sample_file("src/mymod.saha")
+        );
+
+        let expected_std_import = Import::Std(
+            "std.coremod.Foobar".to_string(),
+            "Foobar".to_string(),
+        );
+
+        let expected_projalias_import = Import::Project(
+            "project.mymod.HelloWorld".to_string(),
+            "HiyaWorld".to_string(),
+            get_test_sample_file("src/mymod.saha")
+        );
+
+        match projtokens {
+            Ok(mut tks) => {
+                let tok = tks.remove(0);
+                assert!(tok == Token::Import(testfilepos(), expected_proj_import), format!("Encountered a `{:?}`", tok));
+            }
+            Err(_) => unreachable!()
+        };
+
+        match stdtokens {
+            Ok(mut tks) => {
+                let tok = tks.remove(0);
+                assert!(tok == Token::Import(testfilepos(), expected_std_import), format!("Encountered a `{:?}`", tok));
+            }
+            Err(_) => unreachable!()
+        };
+
+        match projaliastokens {
+            Ok(mut tks) => {
+                let tok = tks.remove(0);
+                assert!(tok == Token::Import(testfilepos(), expected_projalias_import), format!("Encountered a `{:?}`", tok));
+            },
+            Err(_) => unreachable!()
+        };
+    }
+
+    #[test]
+    fn test_malformed_imports_fail() {
+        let testpath: PathBuf = PathBuf::from("/unknown");
+
+        let fail_lexemes = vec![
+            Lexeme::Word(testfilepos(), "use".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "nonamespacing".to_string()),
+            Lexeme::Symbol(testfilepos(), ";".to_string()),
+        ];
+
+        let mut fail_tokenizer = Tokenizer::new(fail_lexemes, &testpath);
+
+        let fail_tokens = fail_tokenizer.tokenize();
+
+        assert!(fail_tokens.is_err());
     }
 }

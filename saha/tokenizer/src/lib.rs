@@ -8,6 +8,7 @@
 extern crate saha_lib;
 extern crate noisy_float;
 
+mod imports;
 mod lexer;
 mod tokenizer;
 pub mod token;
@@ -22,7 +23,7 @@ use ::{
 
 pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
     let mut lexemes = lexemize_source_file(file)?;
-    let tokens: Vec<Token> = tokenize_lexemes(lexemes)?;
+    let tokens: Vec<Token> = tokenize_lexemes(lexemes, file)?;
 
     return Ok(tokens);
 }
