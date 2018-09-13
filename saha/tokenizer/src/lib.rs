@@ -13,7 +13,11 @@ mod lexer;
 mod tokenizer;
 pub mod token;
 
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    path::PathBuf
+};
+
 use saha_lib::errors::ParseError;
 use ::{
     lexer::lexemize_source_file,

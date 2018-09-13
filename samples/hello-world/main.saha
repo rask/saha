@@ -2,11 +2,14 @@
 ///
 /// All Saha applications require a main() function that returns an integer. The
 /// main() function takes no parameters.
-function main() integer
+function main() int
 {
-    var str hello_world_value = "Hello world!";
-    
+    // Define a variable of type `str`
+    var str'hello_world_value = "Hello world!";
+
+    // Print a value to stdout
     print(value = hello_world_value);
 
+    // Return integer
     return 0;
 }
