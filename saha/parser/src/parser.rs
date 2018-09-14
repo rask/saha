@@ -41,11 +41,6 @@ pub trait HandlesTokens {
     /// Consume any token.
     fn consume_any(&mut self) -> PR<()>;
 
-    /// Return a parse error with wanted message and file position.
-    fn parse_error(&mut self, message: &str, position: &FilePosition) -> PR<()> {
-        return Err(ParseError::new(message, Some(position.clone())));
-    }
-
     /// Return a parse error for an unexpected token.
     fn unexpected(&mut self, token: &Token, expected: Vec<&str>) -> PR<()> {
         return Err(ParseError::new(
@@ -170,7 +165,7 @@ impl<'a> HandlesTokens for RootParser<'a> {
                 ));
             }
 
-            return self.parse_error("Unexpected end of token stream", &FilePosition::unknown());
+            return Err(ParseError::new("Unexpected end of token stream", Some(FilePosition::unknown())));
         }
 
         if !next_discriminants.contains(&discriminant(&self.ctok.unwrap().clone())) {
@@ -203,7 +198,7 @@ impl<'a> HandlesTokens for RootParser<'a> {
                 ));
             }
 
-            return self.parse_error("Unexpected end of token stream", &FilePosition::unknown());
+            return Err(ParseError::new("Unexpected end of token stream", Some(FilePosition::unknown())));
         }
 
         let next = self.tokens.peek();
