@@ -30,15 +30,17 @@ type TokenizationResult = Result<Vec<Token>, ParseError>;
 /// Manages the tokenization of source files.
 pub struct Tokenizer<'a> {
     main_file: &'a PathBuf,
-    lexemes: Vec<Lexeme>
+    lexemes: Vec<Lexeme>,
+    module: String
 }
 
 impl<'a> Tokenizer<'a> {
     /// Get a new tokenizer for a source file.
-    pub fn new(lexemes: Vec<Lexeme>, main_file: &PathBuf) -> Tokenizer {
+    pub fn new(lexemes: Vec<Lexeme>, main_file: &PathBuf, module_name: String) -> Tokenizer {
         return Tokenizer {
             main_file: main_file,
-            lexemes: lexemes
+            lexemes: lexemes,
+            module: module_name
         };
     }
 
@@ -234,24 +236,22 @@ impl<'a> Tokenizer<'a> {
                     let copysource = source.to_owned();
 
                     if names_to_alias.contains_key(source) {
+                        // this alters names to match imported module names
                         let alias_to: String = names_to_alias.get(source).unwrap().to_string();
 
                         Token::Name(copypos, alias_to, copysource)
                     } else {
-                        // see if we need to prepend root level declarations with `project.`
+                        // see if we need to prepend module name to declarations, so they are
+                        // namespaced in the end result of tokens
                         match alias_previous {
                             Some(ref p) => {
                                 match p {
                                     Token::KwFunction(ref f) |
                                     Token::KwBehavior(ref f) |
                                     Token::KwClass(ref f)  => {
-                                        if &f.path == main_file {
-                                            let alias_to = format!("project.{}", source);
+                                        let alias_to = format!("{}.{}", self.module, source);
 
-                                            Token::Name(copypos, alias_to, copysource)
-                                        } else {
-                                            tok.to_owned()
-                                        }
+                                        Token::Name(copypos, alias_to, copysource)
                                     },
                                     _ => tok.to_owned()
                                 }
@@ -425,15 +425,13 @@ impl<'a> Tokenizer<'a> {
                         "bool" => Token::TypeBoolean(fp),
                         "int" => Token::TypeInteger(fp),
                         "float" => Token::TypeFloat(fp),
-                        "list" => Token::TypeList(fp),
-                        "dict" => Token::TypeDictionary(fp),
 
                         // keywords
                         "var" => Token::KwVar(fp),
                         "function" => Token::KwFunction(fp),
                         "method" => Token::KwMethod(fp),
                         "static" => Token::KwStatic(fp),
-                        "public" => Token::KwPublic(fp),
+                        "pub" => Token::KwPublic(fp),
                         "class" => Token::KwClass(fp),
                         "behavior" => Token::KwBehavior(fp),
                         "const" => Token::KwConstant(fp),
@@ -478,8 +476,8 @@ impl<'a> Tokenizer<'a> {
 }
 
 /// Tokenize a Saha source file that has been lexemized.
-pub fn tokenize_lexemes(lexemes: Vec<Lexeme>, main_file: &PathBuf) -> TokenizationResult {
-    let mut tokenizer = Tokenizer::new(lexemes, main_file);
+pub fn tokenize_lexemes(lexemes: Vec<Lexeme>, main_file: &PathBuf, module_name: String) -> TokenizationResult {
+    let mut tokenizer = Tokenizer::new(lexemes, main_file, module_name);
 
     return tokenizer.tokenize();
 }
@@ -517,10 +515,6 @@ mod tests {
         return get_test_sample_file("src/main.saha");
     }
 
-    fn create_testfile() -> bool {
-        return false;
-    }
-
     #[test]
     fn test_tokenizer_tokenizes_basic_sources() {
         let testpath: PathBuf = get_test_main_file();
@@ -551,7 +545,7 @@ mod tests {
             Token::EndStatement(testfilepos()),
         ];
 
-        let mut tokenizer = Tokenizer::new(lexemes, &testpath);
+        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::new());
 
         let tokens = tokenizer.tokenize();
         let printtok = tokenizer.tokenize();
@@ -588,9 +582,9 @@ mod tests {
             Lexeme::Symbol(testfilepos(), ";".to_string()),
         ];
 
-        let mut proj_tokenizer = Tokenizer::new(proj_lexemes, &testpath);
-        let mut std_tokenizer = Tokenizer::new(std_lexemes, &testpath);
-        let mut proj_alias_tokenizer = Tokenizer::new(proj_aliased_lexemes, &testpath);
+        let mut proj_tokenizer = Tokenizer::new(proj_lexemes, &testpath, String::from("project"));
+        let mut std_tokenizer = Tokenizer::new(std_lexemes, &testpath, String::from("project"));
+        let mut proj_alias_tokenizer = Tokenizer::new(proj_aliased_lexemes, &testpath, String::from("project"));
 
         let projtokens = proj_tokenizer.tokenize();
         let stdtokens = std_tokenizer.tokenize();
@@ -652,7 +646,7 @@ mod tests {
             Lexeme::Symbol(testfilepos(), ";".to_string()),
         ];
 
-        let mut fail_tokenizer = Tokenizer::new(fail_lexemes, &testpath);
+        let mut fail_tokenizer = Tokenizer::new(fail_lexemes, &testpath, String::from("project"));
 
         let fail_tokens = fail_tokenizer.tokenize();
 
@@ -737,7 +731,7 @@ mod tests {
             Token::CurlyClose(lexemepos.clone()),
         ];
 
-        let mut tokenizer = Tokenizer::new(lexemes, &testpath);
+        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::from("project"));
 
         let tokens = tokenizer.tokenize();
 

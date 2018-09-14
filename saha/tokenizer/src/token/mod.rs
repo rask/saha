@@ -4,8 +4,11 @@
 //! together an abstract syntax tree. Tokens are parsed from lexemes.
 
 use noisy_float::prelude::*;
+use std::{
+    path::PathBuf,
+    fmt::{Display, Result as FmtResult, Formatter}
+};
 use saha_lib::source::FilePosition;
-
 use ::imports::Import;
 
 /// A single tokenized piece of Saha source code.
@@ -108,12 +111,6 @@ pub enum Token {
 
     /// `bool` declaration.
     TypeBoolean(FilePosition),
-
-    /// `list` declaration.
-    TypeList(FilePosition),
-
-    /// `dict` declaration.
-    TypeDictionary(FilePosition),
 
     // OPERATORS
 
@@ -231,6 +228,84 @@ pub enum Token {
     KwRaise(FilePosition),
 }
 
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        let variant: String = match self {
+            Token::StringValue(_, _) => "Literal string".to_string(),
+            Token::IntegerValue(_, _) => "Literal integer".to_string(),
+            Token::FloatValue(_, _) => "Literal float".to_string(),
+            Token::BooleanValue(_, b) => format!("Boolean [{:?}]", b),
+            Token::Name(_, _, orig) => format!("Name [{:?}]", orig),
+            Token::ObjectAccess(_) => "Object access".to_string(),
+            Token::StaticAccess(_) => "Static access".to_string(),
+            Token::Comma(_) => "Comma".to_string(),
+            Token::Colon(_) => "Colon".to_string(),
+            Token::Negation(_) => "Negation".to_string(),
+            Token::QuestionMark(_) => "Question mark".to_string(),
+            Token::SingleQuote(_) => "Single quote".to_string(),
+            Token::Ampersand(_) => "Ampersand [&]".to_string(),
+            Token::Pipe(_) => "Pipe [|]".to_string(),
+            Token::EndStatement(_) => "Statement end [;]".to_string(),
+            Token::ParensOpen(_) => "Parenthesis open".to_string(),
+            Token::ParensClose(_) => "Parenthesis close".to_string(),
+            Token::BraceOpen(_) => "Brace open".to_string(),
+            Token::BraceClose(_) => "Brace close".to_string(),
+            Token::CurlyOpen(_) => "Curly brace open".to_string(),
+            Token::CurlyClose(_) => "Curly brace close".to_string(),
+            Token::Import(_, _) => "Import definition".to_string(),
+            Token::Assign(_) => "Assignment".to_string(),
+            Token::Eof(_) => "EOF".to_string(),
+            Token::Eob => "EOB".to_string(),
+
+            Token::TypeString(_) => "Type declaration [string]".to_string(),
+            Token::TypeInteger(_) => "Type declaration [integer]".to_string(),
+            Token::TypeFloat(_) => "Type declaration [float]".to_string(),
+            Token::TypeBoolean(_) => "Type declaration [boolean]".to_string(),
+
+            Token::OpAdd(_) => "Operator [+]".to_string(),
+            Token::OpSub(_) => "Operator [-]".to_string(),
+            Token::OpDiv(_) => "Operator [/]".to_string(),
+            Token::OpMul(_) => "Operator [*]".to_string(),
+            Token::OpEq(_) => "Operator [==]".to_string(),
+            Token::OpNeq(_) => "Operator [!=]".to_string(),
+            Token::OpGt(_) => "Operator [>]".to_string(),
+            Token::OpGte(_) => "Operator [>=]".to_string(),
+            Token::OpLt(_) => "Operator [<]".to_string(),
+            Token::OpLte(_) => "Operator [<=]".to_string(),
+            Token::OpAnd(_) => "Operator [&&]".to_string(),
+            Token::OpOr(_) => "Operator [||]".to_string(),
+
+            Token::KwUse(_) => "Keyword [use]".to_string(),
+            Token::KwAs(_) => "Keyword [as]".to_string(),
+            Token::KwClass(_) => "Keyword [class]".to_string(),
+            Token::KwBehavior(_) => "Keyword [behavior]".to_string(),
+            Token::KwVar(_) => "Keyword [var]".to_string(),
+            Token::KwProperty(_) => "Keyword [property]".to_string(),
+            Token::KwConstant(_) => "Keyword [constant]".to_string(),
+            Token::KwReturn(_) => "Keyword [return]".to_string(),
+            Token::KwStatic(_) => "Keyword [static]".to_string(),
+            Token::KwNew(_) => "Keyword [new]".to_string(),
+            Token::KwFor(_) => "Keyword [for]".to_string(),
+            Token::KwIn(_) => "Keyword [in]".to_string(),
+            Token::KwLoop(_) => "Keyword [loop]".to_string(),
+            Token::KwIf(_) => "Keyword [if]".to_string(),
+            Token::KwElseif(_) => "Keyword [elseif]".to_string(),
+            Token::KwElse(_) => "Keyword [else]".to_string(),
+            Token::KwImplements(_) => "Keyword [implements]".to_string(),
+            Token::KwFunction(_) => "Keyword [function]".to_string(),
+            Token::KwMethod(_) => "Keyword [method]".to_string(),
+            Token::KwPublic(_) => "Keyword [public]".to_string(),
+            Token::KwBreak(_) => "Keyword [break]".to_string(),
+            Token::KwContinue(_) => "Keyword [continue]".to_string(),
+            Token::KwTry(_) => "Keyword [try]".to_string(),
+            Token::KwCatch(_) => "Keyword [catch]".to_string(),
+            Token::KwRaise(_) => "Keyword [raise]".to_string(),
+        };
+
+        write!(f, "{:?}", variant)
+    }
+}
+
 impl Token {
     /// Get the source file position of a token.
     pub fn get_file_position(&self) -> FilePosition {
@@ -261,10 +336,8 @@ impl Token {
             Token::FloatValue(f, ..) => f.clone(),
             Token::BooleanValue(f, ..) => f.clone(),
             Token::TypeBoolean(f, ..) => f.clone(),
-            Token::TypeDictionary(f, ..) => f.clone(),
             Token::TypeFloat(f, ..) => f.clone(),
             Token::TypeInteger(f, ..) => f.clone(),
-            Token::TypeList(f, ..) => f.clone(),
             Token::TypeString(f, ..) => f.clone(),
             Token::OpAdd(f, ..) => f.clone(),
             Token::OpSub(f, ..) => f.clone(),
@@ -304,5 +377,40 @@ impl Token {
             Token::KwCatch(f, ..) => f.clone(),
             Token::KwRaise(f, ..) => f.clone(),
         };
+    }
+}
+
+/// Allows checking whether something contains file-based source imports.
+pub trait ContainsImports {
+    /// Check if a Token collection contains a file-based import. Return the
+    /// file which can be imported or None.
+    fn contains_file_imports(&self, ignore_list: &Vec<PathBuf>) -> (Option<PathBuf>, Option<PathBuf>, Option<String>);
+}
+
+impl ContainsImports for Vec<Token> {
+    fn contains_file_imports(&self, ignore_list: &Vec<PathBuf>) -> (Option<PathBuf>, Option<PathBuf>, Option<String>) {
+        for t in self {
+            match t {
+                Token::Import(_, import) => {
+                    match import {
+                        Import::Project(module, _, ref path) => {
+                            let mut modparts: Vec<&str> = module.split('.').collect();
+                            modparts.pop();
+                            let modulepath = modparts.join(".");
+
+                            if ignore_list.contains(&path) {
+                                return (None, Some(path.to_owned()), None);
+                            }
+
+                            return (Some(path.to_owned()), None, Some(modulepath.to_owned()));
+                        },
+                        _ => return (None, None, None)
+                    };
+                },
+                _ => return (None, None, None)
+            };
+        }
+
+        return (None, None, None);
     }
 }

@@ -1,0 +1,6 @@
+use project.flatten_from.foobar;
+use project.flatten_once_more.qwerty;
+
+function main() int {
+    return 0;
+}

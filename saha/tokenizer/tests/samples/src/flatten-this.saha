@@ -1,6 +1,0 @@
-use project.flatten_from.foobar;
-
-function main() int
-{
-    return 0;
-}

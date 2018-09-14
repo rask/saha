@@ -3,4 +3,10 @@ name = "saha_lib"
 version = "0.1.0"
 authors = ["Otto Rask"]
 
+[lib]
+crate-type = ["rlib"]
+
 [dependencies]
+uuid = { version = "0.7.*", features = ["v4"] }
+lazy_static = "1.1.*"
+noisy_float = "0.1.*"

@@ -1,0 +1,3 @@
+use project.flatten_once_more.qwerty;
+
+function foobar() {}

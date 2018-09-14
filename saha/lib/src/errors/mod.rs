@@ -74,3 +74,47 @@ impl Error for ParseError {
         return self.file_position.to_owned();
     }
 }
+
+/// Runtime errors are all the errors that can appear when the application is
+/// being interpreted, and these contain the userland and core defined specific
+/// errors such as `TypeError` and others.
+#[derive(Debug)]
+pub struct RuntimeError {
+    message: String,
+    file_position: Option<FilePosition>,
+    saha_error_type: String,
+}
+
+impl RuntimeError {
+    /// Get the same error, but with a different Saha displayable Saha error
+    /// type. Creates a completely new error instance.
+    pub fn with_type(&self, with_type: String) -> Self {
+        return RuntimeError {
+            message: self.message.to_owned(),
+            file_position: self.file_position.to_owned(),
+            saha_error_type: with_type
+        };
+    }
+}
+
+impl Error for RuntimeError {
+    fn new(message: &str, pos: Option<FilePosition>) -> Self {
+        return RuntimeError {
+            message: message.to_owned(),
+            file_position: pos.clone(),
+            saha_error_type: "RuntimeError".to_string(),
+        };
+    }
+
+    fn get_message(&self) -> String {
+        return self.message.to_owned();
+    }
+
+    fn get_name(&self) -> String {
+        return self.saha_error_type.to_owned();
+    }
+
+    fn get_file_position(&self) -> Option<FilePosition> {
+        return self.file_position.to_owned();
+    }
+}

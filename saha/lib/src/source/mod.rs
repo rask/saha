@@ -9,7 +9,7 @@ use std::path::PathBuf;
 #[derive(Clone, Debug, PartialEq)]
 pub struct FilePosition {
     pub path: PathBuf,
-    pub line: isize,
+    pub line: usize,
     pub column: u32
 }
 

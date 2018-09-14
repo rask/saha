@@ -63,23 +63,6 @@ impl Lexeme {
             Lexeme::Eof(f) => f.clone(),
         };
     }
-
-    /// Compare if Lexeme variant and the contained string matches.
-    pub fn compare_str(&self, string: &str) -> bool {
-        let os = string.to_string();
-
-        return match self {
-            Lexeme::Unknown(..) => false,
-            Lexeme::Symbol(_, s) => *s == os,
-            Lexeme::Word(_, s) => *s == os,
-            Lexeme::Number(_, s) => *s == os,
-            Lexeme::String(_, s) => *s == os,
-            Lexeme::Comment(_, s) => false,
-            Lexeme::Whitespace(..) => false,
-            Lexeme::Newline(..) => false,
-            Lexeme::Eof(..) => false,
-        };
-    }
 }
 
 pub type LexemizationResult = Result<Vec<Lexeme>, ParseError>;
@@ -105,7 +88,7 @@ impl<'a> Lexer<'a> {
         return self.lexemize();
     }
 
-    fn new_filepos(&self, line: isize, col: u32) -> FilePosition {
+    fn new_filepos(&self, line: usize, col: u32) -> FilePosition {
         return FilePosition {
             path: self.source_file.clone(),
             line: line,
@@ -313,6 +296,15 @@ impl<'a> Lexer<'a> {
                     if current_character == '.' && number_buffer.is_empty() == false {
                         number_buffer.push(current_character);
                     } else {
+                        if number_buffer.is_empty() == false {
+                            lexemes.push(Lexeme::Number(
+                                self.new_filepos(current_line, current_column - number_buffer.len() as u32),
+                                number_buffer.iter().collect()
+                            ));
+
+                            number_buffer.clear();
+                        }
+
                         if word_joiners.contains(&current_character) {
                             char_buffer.push(current_character);
                         } else {
@@ -339,15 +331,6 @@ impl<'a> Lexer<'a> {
 
                         if current_character != '/' && comment_can_start == true {
                             comment_can_start = false;
-                        }
-
-                        if number_buffer.is_empty() == false {
-                            lexemes.push(Lexeme::Number(
-                                self.new_filepos(current_line, current_column - number_buffer.len() as u32),
-                                number_buffer.iter().collect()
-                            ));
-
-                            number_buffer.clear();
                         }
                     }
                 },
