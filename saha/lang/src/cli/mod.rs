@@ -10,8 +10,11 @@ use structopt::StructOpt;
 #[structopt(name = "saha")]
 pub struct InterpreterArgs {
     /// Saha entrypoint file, containing a `main()` function
-    #[structopt(name = "FILE", parse(from_os_str))]
-    pub entrypoint: PathBuf
+    #[structopt(name = "FILE", default_value = "", parse(from_os_str))]
+    pub entrypoint: PathBuf,
+
+    #[structopt(short = "V", long = "version")]
+    pub version: bool,
 }
 
 /// Get command line arguments given to the interpreter.

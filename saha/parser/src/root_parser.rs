@@ -6,6 +6,7 @@
 use noisy_float::prelude::*;
 
 use std::{
+    collections::HashMap,
     iter::{Iterator, Peekable},
     slice::Iter,
     mem::{discriminant, Discriminant},
@@ -14,7 +15,10 @@ use std::{
 use saha_lib::{
     errors::{Error, ParseError},
     source::FilePosition,
-    types::SahaType
+    types::{
+        SahaType,
+        functions::SahaFunctionParamDefs
+    }
 };
 
 use saha_tokenizer::token::Token;
@@ -150,11 +154,13 @@ impl<'a> RootParser<'a> {
 
         self.consume_next(vec!["("])?;
 
-        let mut fn_parameter_definitions: Vec<()> = Vec::new();
+        let mut fn_parameter_definitions: SahaFunctionParamDefs = HashMap::new();
 
         match self.ntok.unwrap() {
-            Token::ParensClose(..) => (),
-            _ => self.parse_function_parameter_definitions(&mut fn_parameter_definitions)?
+            Token::ParensClose(..) => {},
+            _ => {
+                self.parse_function_parameter_definitions(&mut fn_parameter_definitions)?;
+            }
         };
 
         self.consume_next(vec![")"])?;
@@ -176,11 +182,11 @@ impl<'a> RootParser<'a> {
     }
 
     /// Parse function declaration parameter definitions.
-    fn parse_function_parameter_definitions(&mut self, mut definitions: &mut Vec<()>) -> PR<()> {
+    fn parse_function_parameter_definitions(&mut self, mut definitions: &mut SahaFunctionParamDefs) -> PR<SahaFunctionParamDefs> {
         unimplemented!()
     }
 
-    // Parse a function return type.
+    /// Parse a function return type.
     fn parse_return_type(&mut self) -> PR<SahaType> {
         self.consume_next(vec!["name", "typestr", "typebool", "typeint", "typefloat", "{"])?;
 
@@ -234,14 +240,17 @@ impl<'a> RootParser<'a> {
         return Ok(block_tokens);
     }
 
+    /// Parse class declaration.
     fn parse_class_declaration(&mut self) -> PR<()> {
         unimplemented!()
     }
 
+    /// Parse behavior declaration.
     fn parse_behavior_declaration(&mut self) -> PR<()> {
         unimplemented!()
     }
 
+    /// Parse constant declaration.
     fn parse_constant_declaration(&mut self) -> PR<()> {
         unimplemented!()
     }

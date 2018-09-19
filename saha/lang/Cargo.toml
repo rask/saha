@@ -9,3 +9,4 @@ saha_parser = { path = "../parser" }
 saha_lib = { path = "../lib" }
 saha_core = { path = "../core" }
 structopt = "0.2"
+rustc_version = "0.2.*"

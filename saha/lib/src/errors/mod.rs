@@ -88,11 +88,11 @@ pub struct RuntimeError {
 impl RuntimeError {
     /// Get the same error, but with a different Saha displayable Saha error
     /// type. Creates a completely new error instance.
-    pub fn with_type(&self, with_type: String) -> Self {
+    pub fn with_type(&self, with_type: &str) -> Self {
         return RuntimeError {
             message: self.message.to_owned(),
             file_position: self.file_position.to_owned(),
-            saha_error_type: with_type
+            saha_error_type: with_type.to_string()
         };
     }
 }
