@@ -21,7 +21,7 @@ use ::parse_table::ParseTable;
 /// Parse result, either something or a parse error.
 pub type PR<T> = Result<T, ParseError>;
 
-type TokenType = Discriminant<Token>;
+pub type TokenType = Discriminant<Token>;
 
 pub trait PeekableIterator : Iterator {
     fn peek(&mut self) -> Option<&Self::Item>;
@@ -34,7 +34,7 @@ impl<I: Iterator> PeekableIterator for Peekable<I> {
 }
 
 /// Anything that parses tokens from a vector of tokens.
-pub trait HandlesTokens {
+pub trait ParsesTokens {
     /// Consume a token of wanted Token enum variant.
     fn consume_next(&mut self, next_variants: Vec<&str>) -> PR<()>;
 
@@ -134,98 +134,5 @@ pub trait HandlesTokens {
         };
 
         return discriminant(&ttok);
-    }
-}
-
-/// RootParser, which parses root level declarations from tokens. Means we use
-/// this to parse constants, classes, behaviors, and functions, while not
-/// touching the tokens inside function/method bodies.
-pub struct RootParser<'a> {
-    ctok: Option<&'a Token>,
-    ptok: Option<&'a Token>,
-    ntok: Option<&'a Token>,
-    parse_table: &'a mut ParseTable,
-    tokens: Peekable<Iter<'a, Token>>
-}
-
-impl<'a> HandlesTokens for RootParser<'a> {
-    fn consume_next(&mut self, next_variants: Vec<&str>) -> PR<()> {
-        let next_discriminants: Vec<TokenType> = next_variants.clone().iter().map(|a| -> TokenType {
-            self.get_dummy_token_type(a)
-        }).collect();
-
-        self.ptok = self.ctok.clone();
-        self.ctok = self.tokens.next();
-
-        if self.ctok.is_none() {
-            if self.ptok.is_some() {
-                return Err(ParseError::new(
-                    &format!("Unexpected end of token stream after `{}` token", self.ptok.unwrap()),
-                    Some(self.ptok.unwrap().get_file_position())
-                ));
-            }
-
-            return Err(ParseError::new("Unexpected end of token stream", Some(FilePosition::unknown())));
-        }
-
-        if !next_discriminants.contains(&discriminant(&self.ctok.unwrap().clone())) {
-            let unexp = self.ctok.unwrap().clone();
-            return self.unexpected(&unexp, next_variants);
-        }
-
-        let next = {
-            self.tokens.peek()
-        };
-
-        if next.is_none() {
-            self.ntok = None;
-        } else {
-            self.ntok = Some(next.unwrap().clone());
-        }
-
-        return Ok(());
-    }
-
-    fn consume_any(&mut self) -> PR<()> {
-        self.ptok = self.ctok.clone();
-        self.ctok = self.tokens.next();
-
-        if self.ctok.is_none() {
-            if self.ptok.is_some() {
-                return Err(ParseError::new(
-                    &format!("Unexpected end of token stream after `{}` token", self.ptok.unwrap()),
-                    Some(self.ptok.unwrap().get_file_position())
-                ));
-            }
-
-            return Err(ParseError::new("Unexpected end of token stream", Some(FilePosition::unknown())));
-        }
-
-        let next = self.tokens.peek();
-
-        if next.is_none() {
-            self.ntok = None;
-        } else {
-            self.ntok = Some(next.unwrap().clone());
-        }
-
-        return Ok(());
-    }
-}
-
-impl<'a> RootParser<'a> {
-    pub fn new(tokens: &'a Vec<Token>, parse_table: &'a mut ParseTable) -> RootParser<'a> {
-        return RootParser {
-            ctok: None,
-            ptok: None,
-            ntok: None,
-            parse_table: parse_table,
-            tokens: tokens.iter().peekable()
-        };
-    }
-
-    /// Parse tokens.
-    pub fn start_parse(&self) -> PR<()> {
-        return Ok(());
     }
 }

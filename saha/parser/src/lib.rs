@@ -17,13 +17,14 @@ extern crate noisy_float;
 
 mod parse_table;
 mod parser;
+mod root_parser;
 
 use saha_lib::errors::{ParseError};
 use saha_tokenizer::token::Token;
 
 use ::{
     parse_table::ParseTable,
-    parser::{RootParser}
+    root_parser::RootParser
 };
 
 /// Parse a collection of tokens into a declaration table and ASTs.
