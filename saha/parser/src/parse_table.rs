@@ -27,10 +27,10 @@ pub struct FunctionDefinition {
 
 /// A property definition.
 pub struct PropertyDefinition {
-    name: String,
-    visibility: MemberVisibility,
-    property_type: SahaType,
-    default: Value
+    pub name: String,
+    pub visibility: MemberVisibility,
+    pub property_type: SahaType,
+    pub default: Value
 }
 
 /// Class definition blueprint. Used to generate class definitions to a symbol

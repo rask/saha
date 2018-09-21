@@ -3,22 +3,23 @@
 //! Parses declarations at source code root level: functions, classes,
 //! behaviors, and constants.
 
-use noisy_float::prelude::*;
-
 use std::{
     collections::HashMap,
     iter::{Iterator, Peekable},
     slice::Iter,
-    mem::{discriminant, Discriminant},
+    mem::discriminant,
 };
 
 use saha_lib::{
-    errors::{Error, ParseError},
+    errors::{
+        Error,
+        ParseError
+    },
     source::FilePosition,
     types::{
         SahaType,
         Value,
-        objects::MemberVisibility,
+        objects::{MemberVisibility},
         functions::{FunctionParameter, SahaFunctionParamDefs}
     }
 };
@@ -26,8 +27,18 @@ use saha_lib::{
 use saha_tokenizer::token::Token;
 
 use ::{
-    parse_table::{ParseTable, FunctionDefinition},
-    parser::{TokenType, PR, ParsesTokens}
+    parse_table::{
+        ParseTable,
+        FunctionDefinition,
+        PropertyDefinition,
+        ClassDefinition,
+        BehaviorDefinition
+    },
+    parser::{
+        TokenType,
+        PR,
+        ParsesTokens
+    }
 };
 
 /// RootParser, which parses root level declarations from tokens. Means we use
@@ -430,7 +441,162 @@ impl<'a> RootParser<'a> {
             _ => unreachable!()
         };
 
+        self.consume_next(vec!["{"])?;
+
+        let (property_definitions, method_definitions, implements) = self.parse_class_body()?;
+
+        // closing `}` was parsed n body parsing function
+
         unimplemented!()
+    }
+
+    /// Parse the contents of a class declaration. Methods, props, implements.
+    fn parse_class_body(&mut self)
+        -> PR<(HashMap<String, PropertyDefinition>, HashMap<String, FunctionDefinition>, Vec<String>)> {
+        let mut props: HashMap<String, PropertyDefinition> = HashMap::new();
+        let mut methods: HashMap<String, FunctionDefinition> = HashMap::new();
+        let mut implements: Vec<String> = Vec::new();
+
+        loop {
+            self.consume_next(vec!["method", "prop", "pub", "static", "implements", "}"])?;
+
+            let mut member_visibility = MemberVisibility::Private;
+            let mut member_is_static = false;
+
+            match self.ctok.unwrap() {
+                Token::CurlyClose(..) => break, // reached end of class body
+                Token::KwPublic(..) => {
+                    member_visibility = MemberVisibility::Public;
+
+                    self.consume_next(vec!["static", "method", "property"])?;
+
+                    match self.ctok.unwrap() {
+                        Token::KwStatic(..) => {
+                            member_is_static = true;
+
+                            self.consume_next(vec!["method", "property"])?;
+
+                            match self.ctok.unwrap() {
+                                Token::KwMethod(..) => {
+                                    let method = self.parse_class_method(member_visibility, member_is_static)?;
+
+                                    methods.insert(method.name.to_owned(), method);
+                                },
+                                Token::KwProperty(..) => {
+                                    let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                                    props.insert(prop.name.to_owned(), prop);
+                                },
+                                _ => unreachable!()
+                            };
+                        },
+                        Token::KwMethod(..) => {
+                            let method = self.parse_class_method(member_visibility, member_is_static)?;
+
+                            methods.insert(method.name.to_owned(), method);
+                        },
+                        Token::KwProperty(..) => {
+                            let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                            props.insert(prop.name.to_owned(), prop);
+                        },
+                        _ => unreachable!()
+                    }
+                },
+                Token::KwStatic(..) => {
+                    member_is_static = true;
+
+                    self.consume_next(vec!["pub", "method", "property"])?;
+
+                    match self.ctok.unwrap() {
+                        Token::KwPublic(..) => {
+                            member_visibility = MemberVisibility::Public;
+
+                            self.consume_next(vec!["method", "property"])?;
+
+                            match self.ctok.unwrap() {
+                                Token::KwMethod(..) => {
+                                    let method = self.parse_class_method(member_visibility, member_is_static)?;
+
+                                    methods.insert(method.name.to_owned(), method);
+                                },
+                                Token::KwProperty(..) => {
+                                    let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                                    props.insert(prop.name.to_owned(), prop);
+                                },
+                                _ => unreachable!()
+                            };
+                        },
+                        Token::KwMethod(..) => {
+                            let method = self.parse_class_method(member_visibility, member_is_static)?;
+
+                            methods.insert(method.name.to_owned(), method);
+                        },
+                        Token::KwProperty(..) => {
+                            let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                            props.insert(prop.name.to_owned(), prop);
+                        },
+                        _ => unreachable!()
+                    };
+                },
+                Token::KwMethod(..) => {
+                    let method = self.parse_class_method(member_visibility, member_is_static)?;
+
+                    methods.insert(method.name.to_owned(), method);
+                },
+                Token::KwProperty(..) => {
+                    let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                    props.insert(prop.name.to_owned(), prop);
+                },
+                Token::KwImplements(..) => {
+                    let mut impl_list = self.parse_implements_list()?;
+
+                    implements.append(&mut impl_list);
+                },
+                _ => unreachable!()
+            };
+        }
+
+        return Ok((props, methods, implements));
+    }
+
+    /// Parse a class property.
+    fn parse_class_property(&mut self, visibility: MemberVisibility, is_static: bool) -> PR<PropertyDefinition> {
+        unimplemented!()
+    }
+
+    /// Parse a class method
+    fn parse_class_method(&mut self, visibility: MemberVisibility, is_static: bool) -> PR<FunctionDefinition> {
+        unimplemented!()
+    }
+
+    /// Parse a comma-separated list of names in an implements declaration.
+    fn parse_implements_list(&mut self) -> PR<Vec<String>> {
+        let mut impl_list: Vec<String> = Vec::new();
+
+        loop {
+            self.consume_next(vec!["name"])?;
+
+            let impl_name = match self.ctok.unwrap() {
+                Token::Name(_, alias, _) => alias,
+                _ => unreachable!()
+            };
+
+            impl_list.push(impl_name.to_owned());
+
+            self.consume_next(vec![",", ";"])?;
+
+            match self.ctok.unwrap() {
+                Token::EndStatement(..) => break,
+                Token::Comma(..) => continue,
+                _ => unreachable!()
+            };
+        }
+
+        return Ok(impl_list);
     }
 
     /// Parse behavior declaration.

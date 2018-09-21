@@ -25,12 +25,14 @@ pub trait SahaObject: Send {
     fn mutate_property(&mut self) -> SahaCallResult;
 }
 
+pub struct Property {}
+
 /// A class definition, or a blueprint in other words. From these actual
 /// class object instances are created.
 pub struct ClassDefinition {
     name: String,
     fqname: String,
-    properties: HashMap<String, ()>,
+    properties: HashMap<String, Property>,
     methods: HashMap<String, Box<SahaCallable>>,
     implements: Vec<String>
 }
