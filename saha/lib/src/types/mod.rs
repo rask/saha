@@ -10,7 +10,7 @@ use noisy_float::prelude::*;
 use ::symbol_table::InstRef;
 
 /// Saha types.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SahaType {
     /// Strings
     Str,
@@ -51,16 +51,16 @@ impl SahaType {
 }
 
 /// A Saha value object.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Value {
-    kind: SahaType,
-    str: Option<String>,
-    int: Option<isize>,
-    float: Option<R64>,
-    bool: Option<bool>,
-    name: Option<String>,
-    obj: Option<InstRef>,
-    void: ()
+    pub kind: SahaType,
+    pub str: Option<String>,
+    pub int: Option<isize>,
+    pub float: Option<R64>,
+    pub bool: Option<bool>,
+    pub name: Option<String>,
+    pub obj: Option<InstRef>,
+    pub void: ()
 }
 
 impl PartialEq for Value {

@@ -488,11 +488,7 @@ mod tests {
     use std::env::current_dir;
 
     fn testfilepos() -> FilePosition {
-        return FilePosition {
-            path: PathBuf::from("/unknown"),
-            line: 0,
-            column: 0
-        };
+        return FilePosition::unknown();
     }
 
     fn testmainpos() -> FilePosition {

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use ::types::functions::SahaCallResult;
+use ::types::functions::{SahaCallable, SahaCallResult};
 
 /// Instances of classes in saha, either core or userland.
 pub trait SahaObject: Send {
@@ -31,6 +31,12 @@ pub struct ClassDefinition {
     name: String,
     fqname: String,
     properties: HashMap<String, ()>,
-    methods: HashMap<String, ()>,
+    methods: HashMap<String, Box<SahaCallable>>,
     implements: Vec<String>
+}
+
+/// Class member visibility, e.g. public or private.
+pub enum MemberVisibility {
+    Public,
+    Private
 }

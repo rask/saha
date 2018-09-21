@@ -1,8 +1,6 @@
 use noisy_float::prelude::*;
 
 use std::{
-    iter::{Iterator, Peekable},
-    slice::Iter,
     mem::{discriminant, Discriminant},
 };
 
@@ -16,22 +14,10 @@ use saha_tokenizer::{
     imports::Import,
 };
 
-use ::parse_table::ParseTable;
-
 /// Parse result, either something or a parse error.
 pub type PR<T> = Result<T, ParseError>;
 
 pub type TokenType = Discriminant<Token>;
-
-pub trait PeekableIterator : Iterator {
-    fn peek(&mut self) -> Option<&Self::Item>;
-}
-
-impl<I: Iterator> PeekableIterator for Peekable<I> {
-    fn peek(&mut self) -> Option<&Self::Item> {
-        Peekable::peek(self)
-    }
-}
 
 /// Anything that parses tokens from a vector of tokens.
 pub trait ParsesTokens {
