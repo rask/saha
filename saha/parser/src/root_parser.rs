@@ -160,10 +160,17 @@ impl<'a> RootParser<'a> {
     fn parse_function_declaration(&mut self) -> PR<()> {
         self.consume_next(vec!["name"])?;
 
-        let (fn_alias, fn_source_name) = match self.ctok.unwrap() {
-            Token::Name(_, a, n) => (a.to_string(), n.to_string()),
+        let (fn_pos, fn_alias, fn_source_name) = match self.ctok.unwrap() {
+            Token::Name(f, a, n) => (f, a.to_string(), n.to_string()),
             _ => unreachable!()
         };
+
+        if self.parse_table.functions.contains_key(&fn_alias) {
+            return Err(ParseError::new(
+                &format!("Cannot redeclare function `{}`", fn_alias),
+                Some(fn_pos.to_owned())
+            ));
+        }
 
         self.consume_next(vec!["("])?;
 
@@ -190,6 +197,7 @@ impl<'a> RootParser<'a> {
         let fn_definition = FunctionDefinition {
             name: fn_alias.to_owned(),
             source_name: fn_source_name,
+            source_position: fn_pos.to_owned(),
             return_type: return_type,
             body_tokens: fn_body_tokens,
             parameters: fn_parameter_definitions,
@@ -339,9 +347,7 @@ impl<'a> RootParser<'a> {
 
     /// Parse constant declaration.
     fn parse_constant_declaration(&mut self) -> PR<()> {
-        let (const_name, const_type) = self.parse_constant_name_declaration()?;
-
-
+        let (const_pos, const_name, const_type) = self.parse_constant_name_declaration()?;
 
         self.consume_next(vec!["="])?;
 
@@ -356,6 +362,13 @@ impl<'a> RootParser<'a> {
                     const_val.kind.to_readable_string()
                 ),
                 Some(self.ctok.unwrap().get_file_position())
+            ));
+        }
+
+        if self.parse_table.constants.contains_key(&const_name) {
+            return Err(ParseError::new(
+                &format!("Cannot redeclare constant `{}`", const_name),
+                Some(const_pos)
             ));
         }
 
@@ -394,7 +407,7 @@ impl<'a> RootParser<'a> {
     }
 
     /// Parse const name and type from `name'type`.
-    fn parse_constant_name_declaration(&mut self) -> PR<(String, SahaType)> {
+    fn parse_constant_name_declaration(&mut self) -> PR<(FilePosition, String, SahaType)> {
         self.consume_next(vec!["name"])?;
 
         let (const_name_pos, const_name) = match self.ctok.unwrap() {
@@ -415,7 +428,7 @@ impl<'a> RootParser<'a> {
             _ => unreachable!()
         };
 
-        return Ok((const_name.to_owned(), const_type));
+        return Ok((const_name_pos.to_owned(), const_name.to_owned(), const_type));
     }
 
     /// Parse a literal non-name non-object value.
@@ -442,6 +455,13 @@ impl<'a> RootParser<'a> {
             _ => unreachable!()
         };
 
+        if self.parse_table.classes.contains_key(cname) {
+            return Err(ParseError::new(
+                &format!("Cannot redeclare class `{}`", cname),
+                Some(cname_pos.to_owned())
+            ));
+        }
+
         self.consume_next(vec!["{"])?;
 
         let (property_definitions, method_definitions, implements) = self.parse_class_body()?;
@@ -451,6 +471,7 @@ impl<'a> RootParser<'a> {
         let class_def = ClassDefinition {
             name: cname.to_owned(),
             source_name: cname_source.to_owned(),
+            source_position: cname_pos.to_owned(),
             methods: method_definitions,
             properties: property_definitions,
             implements: implements
@@ -491,10 +512,24 @@ impl<'a> RootParser<'a> {
                                 Token::KwMethod(..) => {
                                     let method = self.parse_class_method(member_visibility, member_is_static)?;
 
+                                    if methods.contains_key(&method.name) {
+                                        return Err(ParseError::new(
+                                            &format!("Cannot redeclare class method `{}`", method.name),
+                                            Some(method.source_position)
+                                        ));
+                                    }
+
                                     methods.insert(method.name.to_owned(), method);
                                 },
                                 Token::KwProperty(..) => {
                                     let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                                    if props.contains_key(&prop.name) {
+                                        return Err(ParseError::new(
+                                            &format!("Cannot redeclare class property `{}`", prop.name),
+                                            Some(prop.source_position)
+                                        ));
+                                    }
 
                                     props.insert(prop.name.to_owned(), prop);
                                 },
@@ -504,10 +539,24 @@ impl<'a> RootParser<'a> {
                         Token::KwMethod(..) => {
                             let method = self.parse_class_method(member_visibility, member_is_static)?;
 
+                            if methods.contains_key(&method.name) {
+                                return Err(ParseError::new(
+                                    &format!("Cannot redeclare class method `{}`", method.name),
+                                    Some(method.source_position)
+                                ));
+                            }
+
                             methods.insert(method.name.to_owned(), method);
                         },
                         Token::KwProperty(..) => {
                             let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                            if props.contains_key(&prop.name) {
+                                return Err(ParseError::new(
+                                    &format!("Cannot redeclare class property `{}`", prop.name),
+                                    Some(prop.source_position)
+                                ));
+                            }
 
                             props.insert(prop.name.to_owned(), prop);
                         },
@@ -529,10 +578,24 @@ impl<'a> RootParser<'a> {
                                 Token::KwMethod(..) => {
                                     let method = self.parse_class_method(member_visibility, member_is_static)?;
 
+                                    if methods.contains_key(&method.name) {
+                                        return Err(ParseError::new(
+                                            &format!("Cannot redeclare class method `{}`", method.name),
+                                            Some(method.source_position)
+                                        ));
+                                    }
+
                                     methods.insert(method.name.to_owned(), method);
                                 },
                                 Token::KwProperty(..) => {
                                     let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                                    if props.contains_key(&prop.name) {
+                                        return Err(ParseError::new(
+                                            &format!("Cannot redeclare class property `{}`", prop.name),
+                                            Some(prop.source_position)
+                                        ));
+                                    }
 
                                     props.insert(prop.name.to_owned(), prop);
                                 },
@@ -542,10 +605,24 @@ impl<'a> RootParser<'a> {
                         Token::KwMethod(..) => {
                             let method = self.parse_class_method(member_visibility, member_is_static)?;
 
+                            if methods.contains_key(&method.name) {
+                                return Err(ParseError::new(
+                                    &format!("Cannot redeclare class method `{}`", method.name),
+                                    Some(method.source_position)
+                                ));
+                            }
+
                             methods.insert(method.name.to_owned(), method);
                         },
                         Token::KwProperty(..) => {
                             let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                            if props.contains_key(&prop.name) {
+                                return Err(ParseError::new(
+                                    &format!("Cannot redeclare class property `{}`", prop.name),
+                                    Some(prop.source_position)
+                                ));
+                            }
 
                             props.insert(prop.name.to_owned(), prop);
                         },
@@ -555,10 +632,24 @@ impl<'a> RootParser<'a> {
                 Token::KwMethod(..) => {
                     let method = self.parse_class_method(member_visibility, member_is_static)?;
 
+                    if methods.contains_key(&method.name) {
+                        return Err(ParseError::new(
+                            &format!("Cannot redeclare class method `{}`", method.name),
+                            Some(method.source_position)
+                        ));
+                    }
+
                     methods.insert(method.name.to_owned(), method);
                 },
                 Token::KwProperty(..) => {
                     let prop = self.parse_class_property(member_visibility, member_is_static)?;
+
+                    if props.contains_key(&prop.name) {
+                        return Err(ParseError::new(
+                            &format!("Cannot redeclare class property `{}`", prop.name),
+                            Some(prop.source_position)
+                        ));
+                    }
 
                     props.insert(prop.name.to_owned(), prop);
                 },
@@ -578,8 +669,8 @@ impl<'a> RootParser<'a> {
     fn parse_class_property(&mut self, visibility: MemberVisibility, is_static: bool) -> PR<PropertyDefinition> {
         self.consume_next(vec!["name"])?;
 
-        let prop_name = match self.ctok.unwrap() {
-            Token::Name(_, _, n) => n.to_string(),
+        let (prop_pos, prop_name) = match self.ctok.unwrap() {
+            Token::Name(f, _, n) => (f, n.to_string()),
             _ => unreachable!()
         };
 
@@ -621,6 +712,7 @@ impl<'a> RootParser<'a> {
 
         return Ok(PropertyDefinition {
             name: prop_name,
+            source_position: prop_pos.to_owned(),
             visibility: visibility,
             is_static: is_static,
             property_type: prop_type,
@@ -632,8 +724,8 @@ impl<'a> RootParser<'a> {
     fn parse_class_method(&mut self, visibility: MemberVisibility, is_static: bool) -> PR<FunctionDefinition> {
         self.consume_next(vec!["name"])?;
 
-        let method_name = match self.ctok.unwrap() {
-            Token::Name(_, _, n) => n.to_string(),
+        let (method_pos, method_name) = match self.ctok.unwrap() {
+            Token::Name(f, _, n) => (f, n.to_string()),
             _ => unreachable!()
         };
 
@@ -662,6 +754,7 @@ impl<'a> RootParser<'a> {
         let method_definition = FunctionDefinition {
             name: method_name.to_owned(),
             source_name: method_name.to_owned(),
+            source_position: method_pos.to_owned(),
             return_type: return_type,
             body_tokens: fn_body_tokens,
             parameters: fn_parameter_definitions,
@@ -679,10 +772,17 @@ impl<'a> RootParser<'a> {
         loop {
             self.consume_next(vec!["name"])?;
 
-            let impl_name = match self.ctok.unwrap() {
-                Token::Name(_, alias, _) => alias,
+            let (impl_pos, impl_name) = match self.ctok.unwrap() {
+                Token::Name(f, alias, _) => (f, alias),
                 _ => unreachable!()
             };
+
+            if impl_list.contains(impl_name) {
+                return Err(ParseError::new(
+                    &format!("Behavior implemented multiple times `{}`", impl_name),
+                    Some(impl_pos.to_owned())
+                ));
+            }
 
             impl_list.push(impl_name.to_owned());
 
@@ -702,10 +802,17 @@ impl<'a> RootParser<'a> {
     fn parse_behavior_declaration(&mut self) -> PR<()> {
         self.consume_next(vec!["name"])?;
 
-        let (behavior_name, source_name) = match self.ctok.unwrap() {
-            Token::Name(_, alias, s_name) => (alias, s_name),
+        let (behavior_pos, behavior_name, source_name) = match self.ctok.unwrap() {
+            Token::Name(f, alias, s_name) => (f, alias, s_name),
             _ => unreachable!()
         };
+
+        if self.parse_table.behaviors.contains_key(behavior_name) {
+            return Err(ParseError::new(
+                &format!("Cannot redeclare class `{}`", behavior_name),
+                Some(behavior_pos.to_owned())
+            ));
+        }
 
         self.consume_next(vec!["{"])?;
 
@@ -714,6 +821,7 @@ impl<'a> RootParser<'a> {
         self.parse_table.behaviors.insert(behavior_name.to_owned(), BehaviorDefinition {
             name: behavior_name.to_owned(),
             source_name: source_name.to_owned(),
+            source_position: behavior_pos.to_owned(),
             methods: method_definitions
         });
 
@@ -729,7 +837,7 @@ impl<'a> RootParser<'a> {
 
             match self.ctok.unwrap() {
                 Token::CurlyClose(..) => break,
-                Token::Name(_, _, method_name) => {
+                Token::Name(name_pos, _, method_name) => {
                     self.consume_next(vec!["("])?;
 
                     let param_defs: SahaFunctionParamDefs = match self.ntok.unwrap() {
@@ -758,6 +866,7 @@ impl<'a> RootParser<'a> {
                     defs.insert(method_name.to_owned(), FunctionDefinition {
                         name: method_name.to_owned(),
                         source_name: method_name.to_owned(),
+                        source_position: name_pos.to_owned(),
                         parameters: param_defs,
                         return_type: return_type,
                         body_tokens: Vec::new(),
@@ -1067,9 +1176,9 @@ mod tests {
 
         let class_definition = parse_table.classes.get("project.MyClass").unwrap();
 
-        let mut cimpl = class_definition.implements.clone();
-        let mut cmeth = class_definition.methods.clone();
-        let mut cprop = class_definition.properties.clone();
+        let cimpl = class_definition.implements.clone();
+        let cmeth = class_definition.methods.clone();
+        let cprop = class_definition.properties.clone();
 
         assert_eq!("project.MyClass".to_string(), class_definition.name);
 
@@ -1144,5 +1253,37 @@ mod tests {
 
         assert_eq!("project.MyBehavior".to_string(), behavior_definition.name);
         assert_eq!(SahaType::Void, behavior_definition.methods.get("otherMethod").unwrap().parameters.get("param1").unwrap().default.kind);
+    }
+
+    #[test]
+    fn test_constants_cannot_be_overwritten() {
+        let tokens = vec![
+            Token::KwConstant(testfilepos()),
+            Token::Name(testfilepos(), "FOOBAR".to_string(), "FOOBAR".to_string()),
+            Token::SingleQuote(testfilepos()),
+            Token::TypeString(testfilepos()),
+            Token::Assign(testfilepos()),
+            Token::StringValue(testfilepos(), "FooestBar".to_string()),
+            Token::EndStatement(testfilepos()),
+            Token::KwConstant(testfilepos()),
+            Token::Name(testfilepos(), "FOOBAR".to_string(), "FOOBAR".to_string()),
+            Token::SingleQuote(testfilepos()),
+            Token::TypeString(testfilepos()),
+            Token::Assign(testfilepos()),
+            Token::StringValue(testfilepos(), "AnotherBar".to_string()),
+            Token::EndStatement(testfilepos()),
+            Token::Eof(testfilepos())
+        ];
+
+        let mut parse_table = ParseTable::new();
+        let mut parser = RootParser::new(&tokens, &mut parse_table);
+        let res = parser.start_parse();
+
+        if res.is_ok() {
+            eprintln!("Test failed, constant was redefined");
+            panic!();
+        }
+
+        assert!(res.err().unwrap().get_message().contains("Cannot redeclare"));
     }
 }

@@ -358,7 +358,15 @@ impl<'a> Tokenizer<'a> {
                         "/" => Token::OpDiv(fp),
                         "!" => Token::Negation(fp),
                         "<" => Token::OpLt(fp),
-                        ">" => Token::OpGt(fp),
+                        ">" => {
+                            if &prev_symbol == "|" {
+                                allow_prev_use = false;
+                                tokens.pop();
+                                Token::OpPipe(fp.shift_col(-1))
+                            } else {
+                                Token::OpGt(fp)
+                            }
+                        },
 
                         // combinable symbols, we need to check back to see if we need to combine
                         "=" => {
@@ -445,6 +453,7 @@ impl<'a> Tokenizer<'a> {
                         "return" => Token::KwReturn(fp),
                         "try" => Token::KwTry(fp),
                         "catch" => Token::KwCatch(fp),
+                        "finally" => Token::KwFinally(fp),
                         "raise" => Token::KwRaise(fp),
                         "new" => Token::KwNew(fp),
                         "use" => Token::KwUse(fp),

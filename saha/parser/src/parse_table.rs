@@ -4,7 +4,9 @@
 //! used to generate the Saha symbol table.
 
 use std::collections::HashMap;
+
 use saha_lib::{
+    source::FilePosition,
     types::{
         Value,
         SahaType,
@@ -20,6 +22,7 @@ use saha_tokenizer::token::Token;
 pub struct FunctionDefinition {
     pub name: String,
     pub source_name: String,
+    pub source_position: FilePosition,
     pub return_type: SahaType,
     pub body_tokens: Vec<Token>,
     pub visibility: MemberVisibility,
@@ -31,6 +34,7 @@ pub struct FunctionDefinition {
 #[derive(Clone)]
 pub struct PropertyDefinition {
     pub name: String,
+    pub source_position: FilePosition,
     pub visibility: MemberVisibility,
     pub is_static: bool,
     pub property_type: SahaType,
@@ -43,6 +47,7 @@ pub struct PropertyDefinition {
 pub struct ClassDefinition {
     pub name: String,
     pub source_name: String,
+    pub source_position: FilePosition,
     pub properties: HashMap<String, PropertyDefinition>,
     pub methods: HashMap<String, FunctionDefinition>,
     pub implements: Vec<String>,
@@ -53,6 +58,7 @@ pub struct ClassDefinition {
 pub struct BehaviorDefinition {
     pub name: String,
     pub source_name: String,
+    pub source_position: FilePosition,
     pub methods: HashMap<String, FunctionDefinition>
 }
 

@@ -67,7 +67,7 @@ fn parse_saha_source(args: &cli::InterpreterArgs) -> Result<(), ParseError> {
 
 /// Run the interpreter.
 fn run_interpreter(args: cli::InterpreterArgs) -> i32 {
-    if (args.entrypoint.to_str().unwrap() == "") {
+    if args.entrypoint.to_str().unwrap() == "" {
         eprintln!("{}", StartupError::new("Please provide a Saha source file", None).format());
         return 1;
     }
@@ -96,7 +96,7 @@ fn get_rustc_version() -> String {
 
     match version {
         Ok(v) => v.to_string(),
-        Err(e) => "unknown".to_string()
+        Err(_) => "unknown".to_string()
     }
 }
 

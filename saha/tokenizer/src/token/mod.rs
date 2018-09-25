@@ -150,6 +150,9 @@ pub enum Token {
     /// `||` characters.
     OpOr(FilePosition),
 
+    /// `|>` characters.
+    OpPipe(FilePosition),
+
     // KEYWORDS
 
     /// `use` keyword.
@@ -224,6 +227,9 @@ pub enum Token {
     /// `catch` keyword.
     KwCatch(FilePosition),
 
+    /// `finally` keyword.
+    KwFinally(FilePosition),
+
     /// `raise` keyword.
     KwRaise(FilePosition),
 }
@@ -274,6 +280,7 @@ impl Display for Token {
             Token::OpLte(_) => "Operator [<=]".to_string(),
             Token::OpAnd(_) => "Operator [&&]".to_string(),
             Token::OpOr(_) => "Operator [||]".to_string(),
+            Token::OpPipe(_) => "Operator [|>]".to_string(),
 
             Token::KwUse(_) => "Keyword [use]".to_string(),
             Token::KwAs(_) => "Keyword [as]".to_string(),
@@ -299,6 +306,7 @@ impl Display for Token {
             Token::KwContinue(_) => "Keyword [continue]".to_string(),
             Token::KwTry(_) => "Keyword [try]".to_string(),
             Token::KwCatch(_) => "Keyword [catch]".to_string(),
+            Token::KwFinally(_) => "Keyword [finally]".to_string(),
             Token::KwRaise(_) => "Keyword [raise]".to_string(),
         };
 
@@ -351,6 +359,7 @@ impl Token {
             Token::OpLte(f, ..) => f.clone(),
             Token::OpAnd(f, ..) => f.clone(),
             Token::OpOr(f, ..) => f.clone(),
+            Token::OpPipe(f, ..) => f.clone(),
             Token::KwUse(f, ..) => f.clone(),
             Token::KwAs(f, ..) => f.clone(),
             Token::KwClass(f, ..) => f.clone(),
@@ -375,6 +384,7 @@ impl Token {
             Token::KwBreak(f, ..) => f.clone(),
             Token::KwTry(f, ..) => f.clone(),
             Token::KwCatch(f, ..) => f.clone(),
+            Token::KwFinally(f, ..) => f.clone(),
             Token::KwRaise(f, ..) => f.clone(),
         };
     }
