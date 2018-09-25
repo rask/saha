@@ -38,6 +38,7 @@ pub struct ClassDefinition {
 }
 
 /// Class member visibility, e.g. public or private.
+#[derive(Clone, Debug, PartialEq)]
 pub enum MemberVisibility {
     Public,
     Private

@@ -16,25 +16,30 @@ use saha_lib::{
 use saha_tokenizer::token::Token;
 
 /// Function defintion, from which a callable can be built from.
+#[derive(Clone)]
 pub struct FunctionDefinition {
     pub name: String,
     pub source_name: String,
     pub return_type: SahaType,
     pub body_tokens: Vec<Token>,
     pub visibility: MemberVisibility,
+    pub is_static: bool,
     pub parameters: SahaFunctionParamDefs
 }
 
 /// A property definition.
+#[derive(Clone)]
 pub struct PropertyDefinition {
     pub name: String,
     pub visibility: MemberVisibility,
+    pub is_static: bool,
     pub property_type: SahaType,
     pub default: Value
 }
 
 /// Class definition blueprint. Used to generate class definitions to a symbol
 /// table.
+#[derive(Clone)]
 pub struct ClassDefinition {
     pub name: String,
     pub source_name: String,
@@ -44,6 +49,7 @@ pub struct ClassDefinition {
 }
 
 /// Behavior definitions, used to build actual behaviors.
+#[derive(Clone)]
 pub struct BehaviorDefinition {
     pub name: String,
     pub source_name: String,
@@ -54,8 +60,8 @@ pub struct BehaviorDefinition {
 pub struct ParseTable {
     pub functions: HashMap<String, FunctionDefinition>,
     pub constants: HashMap<String, Value>,
-    pub classes: HashMap<String, ()>,
-    pub behaviors: HashMap<String, ()>,
+    pub classes: HashMap<String, ClassDefinition>,
+    pub behaviors: HashMap<String, BehaviorDefinition>,
 }
 
 impl ParseTable {

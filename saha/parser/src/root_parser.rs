@@ -140,7 +140,7 @@ impl<'a> RootParser<'a> {
         match self.ctok.unwrap() {
             Token::KwFunction(..) => self.parse_function_declaration(),
             Token::KwClass(..) => self.parse_class_declaration(),
-            Token::KwMethod(..) => self.parse_behavior_declaration(),
+            Token::KwBehavior(..) => self.parse_behavior_declaration(),
             Token::KwConstant(..) => self.parse_constant_declaration(),
             Token::Import(..) => Ok(()), // TODO validate how this should really be handled
             Token::Eof(..) => {
@@ -160,8 +160,8 @@ impl<'a> RootParser<'a> {
     fn parse_function_declaration(&mut self) -> PR<()> {
         self.consume_next(vec!["name"])?;
 
-        let (fn_name_position, fn_alias, fn_source_name) = match self.ctok.unwrap() {
-            Token::Name(f, a, n) => (f, a.to_string(), n.to_string()),
+        let (fn_alias, fn_source_name) = match self.ctok.unwrap() {
+            Token::Name(_, a, n) => (a.to_string(), n.to_string()),
             _ => unreachable!()
         };
 
@@ -193,7 +193,8 @@ impl<'a> RootParser<'a> {
             return_type: return_type,
             body_tokens: fn_body_tokens,
             parameters: fn_parameter_definitions,
-            visibility: MemberVisibility::Public
+            visibility: MemberVisibility::Public,
+            is_static: false
         };
 
         self.parse_table.functions.insert(fn_alias, fn_definition);
@@ -445,9 +446,19 @@ impl<'a> RootParser<'a> {
 
         let (property_definitions, method_definitions, implements) = self.parse_class_body()?;
 
-        // closing `}` was parsed n body parsing function
+        // closing `}` was parsed in body parsing function
 
-        unimplemented!()
+        let class_def = ClassDefinition {
+            name: cname.to_owned(),
+            source_name: cname_source.to_owned(),
+            methods: method_definitions,
+            properties: property_definitions,
+            implements: implements
+        };
+
+        self.parse_table.classes.insert(cname.to_owned(), class_def);
+
+        return self.parse_root();
     }
 
     /// Parse the contents of a class declaration. Methods, props, implements.
@@ -565,12 +576,100 @@ impl<'a> RootParser<'a> {
 
     /// Parse a class property.
     fn parse_class_property(&mut self, visibility: MemberVisibility, is_static: bool) -> PR<PropertyDefinition> {
-        unimplemented!()
+        self.consume_next(vec!["name"])?;
+
+        let prop_name = match self.ctok.unwrap() {
+            Token::Name(_, _, n) => n.to_string(),
+            _ => unreachable!()
+        };
+
+        self.consume_next(vec!["'"])?;
+
+        self.consume_next(vec!["name", "str", "int", "float", "bool"])?;
+
+        let prop_type = match self.ctok.unwrap() {
+            Token::TypeBoolean(..) => SahaType::Bool,
+            Token::TypeString(..) => SahaType::Str,
+            Token::TypeInteger(..) => SahaType::Int,
+            Token::TypeFloat(..) => SahaType::Float,
+            Token::Name(_, alias, _) => SahaType::Name(alias.to_owned()),
+            _ => unreachable!()
+        };
+
+        self.consume_next(vec![";", "="])?;
+
+        let default_value = match self.ctok.unwrap() {
+            Token::EndStatement(..) => Value::void(),
+            Token::Assign(..) => {
+                // property defaults can only be of a primitive value
+                self.consume_next(vec!["stringval", "integerval", "floatval", "booleanval"])?;
+
+                let default = match self.ctok.unwrap() {
+                    Token::StringValue(_, val) => Value::str(val.to_owned()),
+                    Token::IntegerValue(_, val) => Value::int(*val),
+                    Token::FloatValue(_, val) => Value::float(*val),
+                    Token::BooleanValue(_, val) => Value::bool(*val),
+                    _ => unreachable!()
+                };
+
+                self.consume_next(vec![";"])?;
+
+                default
+            },
+            _ => unreachable!()
+        };
+
+        return Ok(PropertyDefinition {
+            name: prop_name,
+            visibility: visibility,
+            is_static: is_static,
+            property_type: prop_type,
+            default: default_value
+        });
     }
 
     /// Parse a class method
     fn parse_class_method(&mut self, visibility: MemberVisibility, is_static: bool) -> PR<FunctionDefinition> {
-        unimplemented!()
+        self.consume_next(vec!["name"])?;
+
+        let method_name = match self.ctok.unwrap() {
+            Token::Name(_, _, n) => n.to_string(),
+            _ => unreachable!()
+        };
+
+        self.consume_next(vec!["("])?;
+
+        let fn_parameter_definitions: SahaFunctionParamDefs = match self.ntok.unwrap() {
+            Token::ParensClose(..) => HashMap::new(),
+            _ => self.parse_function_parameter_definitions()?
+        };
+
+        self.consume_next(vec![")"])?;
+
+        let return_type: SahaType = self.parse_function_return_type()?;
+
+        // If there was a return type we need to consume the body open curly here, otherwise it has
+        // been consumed already
+        match return_type {
+            SahaType::Void => (),
+            _ => self.consume_next(vec!["{"])?
+        };
+
+        let fn_body_tokens = self.parse_curly_block()?;
+
+        // last curly open token was parsed in the parse fn call above
+
+        let method_definition = FunctionDefinition {
+            name: method_name.to_owned(),
+            source_name: method_name.to_owned(),
+            return_type: return_type,
+            body_tokens: fn_body_tokens,
+            parameters: fn_parameter_definitions,
+            visibility: visibility,
+            is_static: is_static
+        };
+
+        return Ok(method_definition);
     }
 
     /// Parse a comma-separated list of names in an implements declaration.
@@ -601,7 +700,76 @@ impl<'a> RootParser<'a> {
 
     /// Parse behavior declaration.
     fn parse_behavior_declaration(&mut self) -> PR<()> {
-        unimplemented!()
+        self.consume_next(vec!["name"])?;
+
+        let (behavior_name, source_name) = match self.ctok.unwrap() {
+            Token::Name(_, alias, s_name) => (alias, s_name),
+            _ => unreachable!()
+        };
+
+        self.consume_next(vec!["{"])?;
+
+        let method_definitions: HashMap<String, FunctionDefinition> = self.parse_behavior_body()?;
+
+        self.parse_table.behaviors.insert(behavior_name.to_owned(), BehaviorDefinition {
+            name: behavior_name.to_owned(),
+            source_name: source_name.to_owned(),
+            methods: method_definitions
+        });
+
+        return self.parse_root();
+    }
+
+    /// Parse behavior body contents (methods).
+    fn parse_behavior_body(&mut self) -> PR<HashMap<String, FunctionDefinition>> {
+        let mut defs: HashMap<String, FunctionDefinition> = HashMap::new();
+
+        loop {
+            self.consume_next(vec!["name", "}"])?;
+
+            match self.ctok.unwrap() {
+                Token::CurlyClose(..) => break,
+                Token::Name(_, _, method_name) => {
+                    self.consume_next(vec!["("])?;
+
+                    let param_defs: SahaFunctionParamDefs = match self.ntok.unwrap() {
+                        Token::ParensClose(..) => HashMap::new(),
+                        _ => self.parse_function_parameter_definitions()?
+                    };
+
+                    self.consume_next(vec![")"])?;
+
+                    self.consume_next(vec![";", "str", "int", "float", "bool", "name"])?;
+
+                    let return_type = match self.ctok.unwrap() {
+                        Token::EndStatement(..) => SahaType::Void,
+                        Token::TypeBoolean(..) => SahaType::Bool,
+                        Token::TypeString(..) => SahaType::Str,
+                        Token::TypeInteger(..) => SahaType::Int,
+                        Token::TypeFloat(..) => SahaType::Float,
+                        Token::Name(_, n, _) => SahaType::Name(n.to_owned()),
+                        _ => unreachable!()
+                    };
+
+                    if return_type != SahaType::Void {
+                        self.consume_next(vec![";"])?;
+                    }
+
+                    defs.insert(method_name.to_owned(), FunctionDefinition {
+                        name: method_name.to_owned(),
+                        source_name: method_name.to_owned(),
+                        parameters: param_defs,
+                        return_type: return_type,
+                        body_tokens: Vec::new(),
+                        visibility: MemberVisibility::Public,
+                        is_static: false
+                    });
+                },
+                _ => unreachable!()
+            };
+        }
+
+        return Ok(defs);
     }
 }
 
@@ -810,5 +978,171 @@ mod tests {
         let fndefinition = parse_table.functions.get("project.main").unwrap();
 
         assert_eq!(18, fndefinition.body_tokens.len());
+    }
+
+    #[test]
+    fn test_empty_classes_are_parsed_properly() {
+        let tokens = vec![
+            Token::KwClass(testfilepos()),
+            Token::Name(testfilepos(), "project.MyClass".to_string(), "MyClass".to_string()),
+            Token::CurlyOpen(testfilepos()),
+            Token::CurlyClose(testfilepos()),
+            Token::Eof(testfilepos())
+        ];
+
+        let mut parse_table = ParseTable::new();
+
+        {
+            let mut parser = RootParser::new(&tokens, &mut parse_table);
+
+            let res = parser.start_parse();
+
+            if res.is_err() {
+                eprintln!("{:?}", res.err().unwrap());
+                panic!();
+            }
+        }
+
+        let class_definition = parse_table.classes.get("project.MyClass").unwrap();
+
+        assert_eq!("project.MyClass".to_string(), class_definition.name);
+    }
+
+    #[test]
+    fn test_classes_are_parsed_properly() {
+        let tokens = vec![
+            Token::KwClass(testfilepos()),
+            Token::Name(testfilepos(), "project.MyClass".to_string(), "MyClass".to_string()),
+            Token::CurlyOpen(testfilepos()),
+
+            Token::KwImplements(testfilepos()),
+            Token::Name(testfilepos(), "project.MyBehavior".to_string(), "MyBehavior".to_string()),
+            Token::Comma(testfilepos()),
+            Token::Name(testfilepos(), "project.MyOtherBehavior".to_string(), "MyBehavior".to_string()),
+            Token::EndStatement(testfilepos()),
+
+            Token::KwProperty(testfilepos()),
+            Token::Name(testfilepos(), "propname".to_string(), "propname".to_string()),
+            Token::SingleQuote(testfilepos()),
+            Token::TypeString(testfilepos()),
+            Token::Assign(testfilepos()),
+            Token::StringValue(testfilepos(), "hello world".to_string()),
+            Token::EndStatement(testfilepos()),
+
+            Token::KwMethod(testfilepos()),
+            Token::Name(testfilepos(), "helloThere".to_string(), "helloThere".to_string()),
+            Token::ParensOpen(testfilepos()),
+            Token::ParensClose(testfilepos()),
+            Token::CurlyOpen(testfilepos()),
+            Token::CurlyClose(testfilepos()),
+
+            Token::KwPublic(testfilepos()),
+            Token::KwMethod(testfilepos()),
+            Token::Name(testfilepos(), "helloAgain".to_string(), "helloAgain".to_string()),
+            Token::ParensOpen(testfilepos()),
+            Token::ParensClose(testfilepos()),
+            Token::TypeInteger(testfilepos()),
+            Token::CurlyOpen(testfilepos()),
+            Token::KwReturn(testfilepos()),
+            Token::IntegerValue(testfilepos(), 0),
+            Token::EndStatement(testfilepos()),
+            Token::CurlyClose(testfilepos()),
+
+            Token::CurlyClose(testfilepos()),
+            Token::Eof(testfilepos())
+        ];
+
+        let mut parse_table = ParseTable::new();
+
+        {
+            let mut parser = RootParser::new(&tokens, &mut parse_table);
+
+            let res = parser.start_parse();
+
+            if res.is_err() {
+                eprintln!("{:?}", res.err().unwrap());
+                panic!();
+            }
+        }
+
+        let class_definition = parse_table.classes.get("project.MyClass").unwrap();
+
+        let mut cimpl = class_definition.implements.clone();
+        let mut cmeth = class_definition.methods.clone();
+        let mut cprop = class_definition.properties.clone();
+
+        assert_eq!("project.MyClass".to_string(), class_definition.name);
+
+        assert_eq!(2, cimpl.len());
+        assert_eq!("project.MyBehavior".to_string(), cimpl[0]);
+
+        assert_eq!(2, cmeth.len());
+        assert_eq!("helloThere".to_string(), cmeth.get("helloThere").unwrap().name);
+        assert_eq!(SahaType::Void, cmeth.get("helloThere").unwrap().return_type);
+        assert_eq!(false, cmeth.get("helloThere").unwrap().is_static);
+        assert_eq!(MemberVisibility::Private, cmeth.get("helloThere").unwrap().visibility);
+
+        assert_eq!(SahaType::Int, cmeth.get("helloAgain").unwrap().return_type);
+        assert_eq!(MemberVisibility::Public, cmeth.get("helloAgain").unwrap().visibility);
+        assert_eq!(vec![
+            Token::KwReturn(testfilepos()),
+            Token::IntegerValue(testfilepos(), 0),
+            Token::EndStatement(testfilepos()),
+            Token::Eob
+        ], cmeth.get("helloAgain").unwrap().body_tokens);
+
+        assert_eq!(1, cprop.len());
+        assert_eq!(SahaType::Str, cprop.get("propname").unwrap().property_type);
+        assert_eq!(Value::str("hello world".to_string()), cprop.get("propname").unwrap().default);
+    }
+
+    #[test]
+    fn test_behaviors_are_parsed_properly() {
+        let tokens = vec![
+            Token::KwBehavior(testfilepos()),
+            Token::Name(testfilepos(), "project.MyBehavior".to_string(), "MyBehavior".to_string()),
+            Token::CurlyOpen(testfilepos()),
+
+            Token::Name(testfilepos(), "getSomeValue".to_string(), "getSomeValue".to_string()),
+            Token::ParensOpen(testfilepos()),
+            Token::ParensClose(testfilepos()),
+            Token::TypeBoolean(testfilepos()),
+            Token::EndStatement(testfilepos()),
+
+            Token::Name(testfilepos(), "otherMethod".to_string(), "otherMethod".to_string()),
+            Token::ParensOpen(testfilepos()),
+            Token::Name(testfilepos(), "param1".to_string(), "param1".to_string()),
+            Token::SingleQuote(testfilepos()),
+            Token::TypeBoolean(testfilepos()),
+            Token::Comma(testfilepos()),
+            Token::Name(testfilepos(), "param2".to_string(), "param2".to_string()),
+            Token::SingleQuote(testfilepos()),
+            Token::TypeInteger(testfilepos()),
+            Token::Assign(testfilepos()),
+            Token::IntegerValue(testfilepos(), 123),
+            Token::ParensClose(testfilepos()),
+            Token::EndStatement(testfilepos()),
+
+            Token::CurlyClose(testfilepos()),
+            Token::Eof(testfilepos())
+        ];
+
+        let mut parse_table = ParseTable::new();
+
+        {
+            let mut parser = RootParser::new(&tokens, &mut parse_table);
+
+            let res = parser.start_parse();
+
+            if res.is_err() {
+                eprintln!("{:?}", res.err().unwrap());
+                panic!();
+            }
+        }
+
+        let behavior_definition = parse_table.behaviors.get("project.MyBehavior").unwrap();
+
+        assert_eq!("project.MyBehavior".to_string(), behavior_definition.name);
+        assert_eq!(SahaType::Void, behavior_definition.methods.get("otherMethod").unwrap().parameters.get("param1").unwrap().default.kind);
     }
 }

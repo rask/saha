@@ -733,4 +733,56 @@ mod tests {
 
         assert_eq!(expected, tokens.unwrap());
     }
+
+    #[test]
+    fn test_implements_lists_are_aliased_properly() {
+        let testpath: PathBuf = get_test_main_file();
+
+        let lexemes = vec![
+            Lexeme::Word(testfilepos(), "use".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "project.mymod.HelloBehavior".to_string()),
+            Lexeme::Symbol(testfilepos(), ";".to_string()),
+
+            Lexeme::Newline(testfilepos()),
+            Lexeme::Newline(testfilepos()),
+
+            Lexeme::Word(testfilepos(), "class".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "MyClass".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Symbol(testfilepos(), "{".to_string()),
+            Lexeme::Newline(testfilepos()),
+            Lexeme::Whitespace(testfilepos(), "    ".to_string()),
+            Lexeme::Word(testfilepos(), "implements".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Word(testfilepos(), "HelloBehavior".to_string()),
+            Lexeme::Symbol(testfilepos(), ";".to_string()),
+            Lexeme::Newline(testfilepos()),
+            Lexeme::Symbol(testfilepos(), "}".to_string())
+        ];
+
+        let import1 = Import::Project(
+            "project.mymod.HelloBehavior".to_string(),
+            "HelloBehavior".to_string(),
+            get_test_sample_file("src/mymod.saha")
+        );
+
+        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::from("project"));
+
+        let tokens = tokenizer.tokenize();
+
+        let expected = vec![
+            Token::Import(testfilepos(), import1),
+            Token::KwClass(testfilepos()),
+            Token::Name(testfilepos(), "project.MyClass".to_string(), "MyClass".to_string()),
+            Token::CurlyOpen(testfilepos()),
+            Token::KwImplements(testfilepos()),
+            Token::Name(testfilepos(), "project.mymod.HelloBehavior".to_string(), "HelloBehavior".to_string()),
+            Token::EndStatement(testfilepos()),
+            Token::CurlyClose(testfilepos()),
+        ];
+
+        assert_eq!(expected, tokens.unwrap());
+    }
 }
