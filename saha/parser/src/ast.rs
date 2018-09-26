@@ -1,11 +1,20 @@
 //! Saha AST definition
 
-use std::collections::HashMap;
+use std::{
+    fmt::{
+        Debug,
+        Formatter as FmtFormatter,
+        Result as FmtResult
+    },
+    collections::HashMap
+};
 
 use saha_lib::{
     source::FilePosition,
     types::{Value, SahaType}
 };
+
+use saha_tokenizer::token::Token;
 
 /// AST. Contains a visitable tree of AST nodes that make the program magic
 /// happen. A single entrypoint in the form of a block is the first thing any
@@ -36,9 +45,13 @@ pub enum StatementKind {
     /// ```saha
     /// var my_var'str = "hello";
     /// ```
-    VarDeclaration(Identifier, SahaType, Box<Expression>),
+    VarDeclaration(Identifier, SahaType, Option<Box<Expression>>),
 
-    /// An expression.
+    /// A one-off expression statement. Example:
+    ///
+    /// ```saha
+    /// (new FooBar())->helloWorld();
+    /// ```
     Expression(Box<Expression>),
 
     /// If-clause. First is the condition, then the `true` block, after is a possible elseif
@@ -124,6 +137,11 @@ pub struct Expression {
     pub kind: ExpressionKind,
 }
 
+/// Stack of expressions, used for operator precedence parsing.
+pub struct ExpressionStack {
+    expressions: Vec<Box<Expression>>
+}
+
 /// Expression kinds.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionKind {
@@ -132,6 +150,9 @@ pub enum ExpressionKind {
 
     /// Literal values in source.
     LiteralValue(Value),
+
+    /// A single identifier, e.g. a variable name.
+    Ident(Identifier),
 
     /// List declaration.
     ///
@@ -162,8 +183,8 @@ pub enum ExpressionKind {
     /// parameter, the name of which will be inferred.
     PipeOperation(Box<Expression>, Box<Expression>),
 
-    /// Binary op. `expr + expr`, `expr * expr`.
-    BinaryOperation(BinOp, Box<Expression>, Box<Expression>),
+    /// Binary op. left -> op -> right, `expr + expr`, `expr * expr`.
+    BinaryOperation(Box<Expression>, BinOp, Box<Expression>),
 
     /// Unary op. `! value`, `- expr`.
     UnaryOperation(UnaryOp, Box<Expression>),
@@ -189,10 +210,44 @@ pub enum ExpressionKind {
 }
 
 /// Binary operation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct BinOp {
-    file_position: FilePosition,
-    kind: BinOpKind
+    pub file_position: FilePosition,
+    pub kind: BinOpKind,
+    pub is_left_assoc: bool
+}
+
+impl BinOp {
+    /// Create a BinOp from a token instance.
+    pub fn from_token(token: &Token) -> Result<BinOp, ()> {
+        let fpos = token.get_file_position();
+
+        let op_kind: BinOpKind = match token {
+            Token::OpAdd(..) => BinOpKind::Add,
+            Token::OpSub(..) => BinOpKind::Sub,
+            Token::OpMul(..) => BinOpKind::Mul,
+            Token::OpDiv(..) => BinOpKind::Div,
+            Token::OpAnd(..) => BinOpKind::And,
+            Token::OpOr(..) => BinOpKind::Or,
+            Token::OpLt(..) => BinOpKind::Lt,
+            Token::OpLte(..) => BinOpKind::Lte,
+            Token::OpGt(..) => BinOpKind::Gt,
+            Token::OpGte(..) => BinOpKind::Gte,
+            _ => return Err(())
+        };
+
+        return Ok(BinOp {
+            file_position: fpos,
+            kind: op_kind,
+            is_left_assoc: true
+        });
+    }
+}
+
+impl Debug for BinOp {
+    fn fmt(&self, f: &mut FmtFormatter) -> FmtResult {
+        return write!(f, "BinOp::{:?}", self.kind);
+    }
 }
 
 /// Binary operation kind.

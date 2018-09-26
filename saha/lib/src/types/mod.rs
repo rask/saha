@@ -7,6 +7,14 @@ pub mod functions;
 
 use noisy_float::prelude::*;
 
+use std::{
+    fmt::{
+        Debug,
+        Formatter as FmtFormatter,
+        Result as FmtResult
+    }
+};
+
 use ::symbol_table::InstRef;
 
 /// Saha types.
@@ -51,7 +59,7 @@ impl SahaType {
 }
 
 /// A Saha value object.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Value {
     pub kind: SahaType,
     pub str: Option<String>,
@@ -94,6 +102,24 @@ impl Default for Value {
             obj: None,
             void: ()
         };
+    }
+}
+
+impl Debug for Value {
+    fn fmt(&self, f: &mut FmtFormatter) -> FmtResult {
+        let k = self.kind.clone();
+
+        let value_str = match k {
+            SahaType::Void => "void".to_string(),
+            SahaType::Int => format!("{}", self.int.unwrap()),
+            SahaType::Float => format!("{}", self.float.unwrap()),
+            SahaType::Bool => format!("{}", self.bool.unwrap()),
+            SahaType::Str => (self.str).clone().unwrap(),
+            SahaType::Name(n) => n.to_owned(),
+            SahaType::Obj => format!("{:?}", self.obj.unwrap())
+        };
+
+        return write!(f, "Value::{:?}({})", self.kind, value_str);
     }
 }
 

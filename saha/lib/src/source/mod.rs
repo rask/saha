@@ -3,10 +3,17 @@
 //! Anything related to managing source code, e.g. token/lexeme positioning and
 //! code file locations.
 
-use std::path::PathBuf;
+use std::{
+    fmt::{
+        Debug,
+        Formatter as FmtFormatter,
+        Result as FmtResult
+    },
+    path::PathBuf
+};
 
 /// Marks a specific position inside a source code file.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct FilePosition {
     pub path: PathBuf,
     pub line: usize,
@@ -27,11 +34,21 @@ impl FilePosition {
         };
     }
 
+    /// Shift the position's column value by an offset.
     pub fn shift_col(&self, shift: i32) -> FilePosition {
         return FilePosition {
             path: self.path.clone(),
             line: self.line.clone(),
             column: self.column + shift as u32
         };
+    }
+}
+
+impl Debug for FilePosition {
+    fn fmt(&self, f: &mut FmtFormatter) -> FmtResult {
+        let mut path_str = format!("{:?}", self.path);
+        path_str.pop();
+        path_str.remove(0);
+        return write!(f, "{}:{}:{}", path_str, self.line, self.column);
     }
 }

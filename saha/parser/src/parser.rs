@@ -77,6 +77,7 @@ pub trait ParsesTokens {
             "typeboolean" | "bool" => Token::TypeBoolean(_f()),
 
             // ops
+            "!" => Token::UnOpNot(_f()),
             "+" => Token::OpAdd(_f()),
             "-" => Token::OpSub(_f()),
             "*" => Token::OpMul(_f()),

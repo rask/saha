@@ -35,9 +35,6 @@ pub enum Token {
     /// `:` character.
     Colon(FilePosition),
 
-    /// `!` character.
-    Negation(FilePosition),
-
     /// `?` character.
     QuestionMark(FilePosition),
 
@@ -113,6 +110,9 @@ pub enum Token {
     TypeBoolean(FilePosition),
 
     // OPERATORS
+
+    /// `!`
+    UnOpNot(FilePosition),
 
     /// `+` character.
     OpAdd(FilePosition),
@@ -246,7 +246,6 @@ impl Display for Token {
             Token::StaticAccess(_) => "Static access".to_string(),
             Token::Comma(_) => "Comma".to_string(),
             Token::Colon(_) => "Colon".to_string(),
-            Token::Negation(_) => "Negation".to_string(),
             Token::QuestionMark(_) => "Question mark".to_string(),
             Token::SingleQuote(_) => "Single quote".to_string(),
             Token::Ampersand(_) => "Ampersand [&]".to_string(),
@@ -268,6 +267,7 @@ impl Display for Token {
             Token::TypeFloat(_) => "Type declaration [float]".to_string(),
             Token::TypeBoolean(_) => "Type declaration [boolean]".to_string(),
 
+            Token::UnOpNot(_) => "Operator [!]".to_string(),
             Token::OpAdd(_) => "Operator [+]".to_string(),
             Token::OpSub(_) => "Operator [-]".to_string(),
             Token::OpDiv(_) => "Operator [/]".to_string(),
@@ -315,6 +315,34 @@ impl Display for Token {
 }
 
 impl Token {
+    /// Get operator precendence. Returns 0 for least priority, and negative value for non-ops.
+    ///
+    /// This function can also be used as a cheap hack to see if a token is in fact a binary
+    /// operator.
+    ///
+    /// In precedence, expressions should be evaluated starting with the highest precedence. This
+    /// means all "math" is done before comparisons, and comparisons precede "true/false" checks.
+    pub fn get_precedence(&self) -> i8 {
+        return match self {
+            Token::OpAnd(..) | Token::OpOr(..) => 0,
+            Token::OpEq(..) | Token::OpNeq(..) | Token::OpGt(..)
+            | Token::OpGte(..) | Token::OpLt(..) | Token::OpLte(..) => 1,
+            Token::OpAdd(..) | Token::OpSub(..) => 2,
+            Token::OpDiv(..) | Token::OpMul(..) => 3,
+            _ => -1
+        };
+    }
+
+    /// Validate whether an operator is left or right associative. Returns error
+    /// in case the token is not a binary operator.
+    pub fn is_left_associative(&self) -> Result<bool, ()> {
+        if self.get_precedence() < 0 {
+            return Err(());
+        }
+
+        return Ok(true);
+    }
+
     /// Get the source file position of a token.
     pub fn get_file_position(&self) -> FilePosition {
         return match self {
@@ -324,7 +352,6 @@ impl Token {
             Token::StaticAccess(f, ..) => f.clone(),
             Token::Comma(f, ..) => f.clone(),
             Token::Colon(f, ..) => f.clone(),
-            Token::Negation(f, ..) => f.clone(),
             Token::QuestionMark(f, ..) => f.clone(),
             Token::SingleQuote(f, ..) => f.clone(),
             Token::Ampersand(f, ..) => f.clone(),
@@ -347,6 +374,7 @@ impl Token {
             Token::TypeFloat(f, ..) => f.clone(),
             Token::TypeInteger(f, ..) => f.clone(),
             Token::TypeString(f, ..) => f.clone(),
+            Token::UnOpNot(f, ..) => f.clone(),
             Token::OpAdd(f, ..) => f.clone(),
             Token::OpSub(f, ..) => f.clone(),
             Token::OpDiv(f, ..) => f.clone(),

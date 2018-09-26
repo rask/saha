@@ -356,7 +356,7 @@ impl<'a> Tokenizer<'a> {
                         "+" => Token::OpAdd(fp),
                         "*" => Token::OpMul(fp),
                         "/" => Token::OpDiv(fp),
-                        "!" => Token::Negation(fp),
+                        "!" => Token::UnOpNot(fp),
                         "<" => Token::OpLt(fp),
                         ">" => {
                             if &prev_symbol == "|" {
