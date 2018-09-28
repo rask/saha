@@ -184,7 +184,7 @@ impl<'a> AstParser<'a> {
                 Token::KwIf(..) => unimplemented!(),
                 Token::KwLoop(..) => unimplemented!(),
                 Token::KwFor(..) => unimplemented!(),
-                Token::KwReturn(..) => unimplemented!(),
+                Token::KwReturn(..) => self.parse_return_statement()?,
                 Token::KwRaise(..) => unimplemented!(),
                 Token::KwTry(..) => unimplemented!(),
                 Token::KwBreak(..) => unimplemented!(),
@@ -268,6 +268,31 @@ impl<'a> AstParser<'a> {
         return Ok(Box::new(stmt));
     }
 
+    /// Parse a return statement.
+    fn parse_return_statement(&mut self) -> PR<Box<Statement>> {
+        self.consume_next(vec!["return"])?;
+
+        let return_pos = self.ctok.unwrap().get_file_position();
+
+        // if we encounter a `;` right after the return keyword, we are returning void, otherwise
+        // we should parse and expression
+        //
+        // we don't consume the `;`, as that is handled in statement parent parsing method from
+        // where this method was called
+        let return_expr: Box<Expression> = match self.ntok.unwrap() {
+            Token::EndStatement(..) => Box::new(Expression {
+                file_position: self.ntok.unwrap().get_file_position(),
+                kind: ExpressionKind::LiteralValue(Value::void())
+            }),
+            _ => self.parse_expression(0)?
+        };
+
+        return Ok(Box::new(Statement {
+            file_position: return_pos,
+            kind: StatementKind::Return(return_expr)
+        }));
+    }
+
     /// Parse an expression.
     fn parse_expression(&mut self, minimum_op_precedence: i8) -> PR<Box<Expression>> {
         let expression = self.parse_primary()?;
@@ -292,7 +317,7 @@ impl<'a> AstParser<'a> {
             "name", "stringval", "integerval", "floatval", "booleanval"
         ])?;
 
-        let expression: Box<Expression> = match self.ctok.unwrap() {
+        let primary: Box<Expression> = match self.ctok.unwrap() {
             Token::ParensOpen(..) => {
                 let expr = self.parse_expression(0)?;
 
@@ -309,11 +334,11 @@ impl<'a> AstParser<'a> {
             | Token::FloatValue(..)
             | Token::BooleanValue(..) => self.parse_literal_value()?,
             Token::KwNew(..) => unimplemented!(),
-            Token::Name(..) => unimplemented!(),
+            Token::Name(..) => self.parse_ident_path()?,
             _ => unreachable!()
         };
 
-        return Ok(expression);
+        return Ok(primary);
     }
 
     /// Parse a binary operation. First we parse the op and then the RHS expression. Then we check
@@ -354,6 +379,7 @@ impl<'a> AstParser<'a> {
             return Ok(binop_expr);
         }
 
+        // FIXME should the next predence be `minimum_op_precedence` or `next_min_precedence` here?
         return self.parse_binop_expression(binop_expr, minimum_op_precedence);
     }
 
@@ -375,6 +401,59 @@ impl<'a> AstParser<'a> {
         };
 
         return Ok(Box::new(val_expr));
+    }
+
+    fn parse_ident_path(&mut self) -> PR<Box<Expression>> {
+        let curtok = self.ctok.unwrap();
+        let mut path_items: Vec<(AccessKind, Identifier)> = Vec::new();
+
+        let root: Identifier = match curtok {
+            Token::Name(pos, alias, _) => {
+                Identifier {
+                    file_position: pos.clone(),
+                    identifier: alias.to_string()
+                }
+            },
+            _ => return Err(ParseError::new(
+                &format!("Unexpected `{}`, expected name", curtok), Some(curtok.get_file_position())
+            ))
+        };
+
+        let mut next_is_access_token: bool = match self.ntok.unwrap() {
+            Token::StaticAccess(..) | Token::ObjectAccess(..) => true,
+            _ => false
+        };
+
+        while next_is_access_token {
+            self.consume_next(vec!["->", "::"])?;
+
+            let access_kind: AccessKind = match self.ctok.unwrap() {
+                Token::ObjectAccess(..) => AccessKind::Instance,
+                Token::StaticAccess(..) => AccessKind::Static,
+                _ => unreachable!()
+            };
+
+            self.consume_next(vec!["name"])?;
+
+            let item_ident: Identifier = match self.ctok.unwrap() {
+                Token::Name(pos, alias, _) => {
+                    Identifier {
+                        file_position: pos.clone(),
+                        identifier: alias.to_string()
+                    }
+                },
+                _ => unreachable!()
+            };
+
+            path_items.push((access_kind, item_ident));
+        }
+
+        let path_expr = Expression {
+            file_position: root.file_position.clone(),
+            kind: ExpressionKind::IdentPath(root, path_items)
+        };
+
+        return Ok(Box::new(path_expr));
     }
 }
 

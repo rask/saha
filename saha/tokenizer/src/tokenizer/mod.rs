@@ -46,20 +46,20 @@ impl<'a> Tokenizer<'a> {
 
     /// Parse import name and path.
     ///
-    /// For `project.` imports, we try to find an actual file to load. For other types we just
+    /// For `pkg.` imports, we try to find an actual file to load. For other types we just
     /// return none as the parser will use internal symbol routing to find the imported members.
     ///
     /// Assuming we are importing a name called
     ///
     /// ```saha
-    /// // /my/project/src/main.saha
-    /// use project.my_module.hello_world;
+    /// // /my/pkg/src/main.saha
+    /// use pkg.my_module.hello_world;
     /// ```
     ///
     /// We will look for the `hello_world` function or other member in the following path:
     ///
     /// ```text
-    /// /my/project/src/my_module.saha
+    /// /my/pkg/src/my_module.saha
     /// ```
     fn parse_import_path_names(&self, namepos: &FilePosition, name: String) -> Result<(String, Option<PathBuf>), ParseError> {
         if name.contains('.') == false {
@@ -69,23 +69,23 @@ impl<'a> Tokenizer<'a> {
         let mut name_parts: Vec<&str> = name.split('.').collect();
         let member = name_parts.pop().unwrap();
 
-        if name.starts_with("project.") {
+        if name.starts_with("pkg.") {
             // we are looking at a filepath based import
-            let mut project_root = self.main_file.clone();
-            project_root.pop(); // pop the main file of the project
+            let mut pkg_root = self.main_file.clone();
+            pkg_root.pop(); // pop the main file of the pkackage
 
-            name_parts.remove(0); // remove the starting `project` to make it inferred instead
+            name_parts.remove(0); // remove the starting `pkg` to make it inferred instead
 
             let import_member_path = name_parts.join("/");
 
-            project_root.push(import_member_path);
-            project_root.set_extension("saha");
+            pkg_root.push(import_member_path);
+            pkg_root.set_extension("saha");
 
-            if project_root.exists() == false {
-                return Err(ParseError::new(&format!("Invalid `use`, file `{:?}` for `{}` does not exist", project_root, name), Some(namepos.to_owned())));
+            if pkg_root.exists() == false {
+                return Err(ParseError::new(&format!("Invalid `use`, file `{:?}` for `{}` does not exist", pkg_root, name), Some(namepos.to_owned())));
             }
 
-            return Ok((member.to_string(), Some(project_root)));
+            return Ok((member.to_string(), Some(pkg_root)));
         }
 
         // std and ext imports do not use filesystem paths but internal routing instead
@@ -94,8 +94,8 @@ impl<'a> Tokenizer<'a> {
 
     /// Get the import type for an import name source string.
     fn get_import_type(&self, import_source_string: &String) -> &str {
-        if import_source_string.starts_with("project.") {
-            return "project";
+        if import_source_string.starts_with("pkg.") {
+            return "pkg";
         } else if import_source_string.starts_with("std.") {
             return "std";
         } else if import_source_string.starts_with("ext.") {
@@ -141,8 +141,8 @@ impl<'a> Tokenizer<'a> {
                             let import_path: Option<PathBuf>; // file path we're importing from
 
                             match import_type {
-                                "project" | "vendor" | "std" | "ext" => (), // "ok"
-                                _ => return Err(ParseError::new("Invalid import type encountered, expected `project`, `std`, or `ext`", Some(pos.to_owned())))
+                                "pkg" | "std" | "ext" => (), // "ok"
+                                _ => return Err(ParseError::new("Invalid import type encountered, expected `pkg`, `std`, or `ext`", Some(pos.to_owned())))
                             };
 
                             let (import_name, import_path) = self.parse_import_path_names(&pos, source.to_string())?;
@@ -167,7 +167,7 @@ impl<'a> Tokenizer<'a> {
                                         names_to_alias.insert(import_name.clone(), source.to_owned());
 
                                         match import_type {
-                                            "project" => Import::Project(source.to_owned(), import_name, import_path.unwrap()),
+                                            "pkg" => Import::Pkg(source.to_owned(), import_name, import_path.unwrap()),
                                             "std" => Import::Std(source.to_owned(), import_name),
                                             "ext" => Import::Ext(source.to_owned(), import_name),
                                             _ => unreachable!()
@@ -203,7 +203,7 @@ impl<'a> Tokenizer<'a> {
                                         };
 
                                         match import_type {
-                                            "project" => Import::Project(source.to_owned(), import_alias, import_path.unwrap()),
+                                            "pkg" => Import::Pkg(source.to_owned(), import_alias, import_path.unwrap()),
                                             "std" => Import::Std(source.to_owned(), import_alias),
                                             "ext" => Import::Ext(source.to_owned(), import_alias),
                                             _ => unreachable!()
@@ -538,7 +538,7 @@ mod tests {
             Lexeme::Symbol(testfilepos(), ";".to_string()),
         ];
 
-        let first_import = Import::Project("project.bar.hello_world".to_string(), "hello_world".to_string(), PathBuf::from(""));
+        let first_import = Import::Pkg("pkg.bar.hello_world".to_string(), "hello_world".to_string(), PathBuf::from(""));
         let second_import = Import::Std("std.bar.baz".to_string(), "FoobarBaz".to_string());
 
         let expected = vec![
@@ -565,7 +565,7 @@ mod tests {
         let proj_lexemes = vec![
             Lexeme::Word(testfilepos(), "use".to_string()),
             Lexeme::Whitespace(testfilepos(), " ".to_string()),
-            Lexeme::Word(testfilepos(), "project.mymod.HelloWorld".to_string()),
+            Lexeme::Word(testfilepos(), "pkg.mymod.HelloWorld".to_string()),
             Lexeme::Symbol(testfilepos(), ";".to_string()),
         ];
 
@@ -579,7 +579,7 @@ mod tests {
         let proj_aliased_lexemes = vec![
             Lexeme::Word(testfilepos(), "use".to_string()),
             Lexeme::Whitespace(testfilepos(), " ".to_string()),
-            Lexeme::Word(testfilepos(), "project.mymod.HelloWorld".to_string()),
+            Lexeme::Word(testfilepos(), "pkg.mymod.HelloWorld".to_string()),
             Lexeme::Whitespace(testfilepos(), " ".to_string()),
             Lexeme::Word(testfilepos(), "as".to_string()),
             Lexeme::Whitespace(testfilepos(), " ".to_string()),
@@ -587,16 +587,16 @@ mod tests {
             Lexeme::Symbol(testfilepos(), ";".to_string()),
         ];
 
-        let mut proj_tokenizer = Tokenizer::new(proj_lexemes, &testpath, String::from("project"));
-        let mut std_tokenizer = Tokenizer::new(std_lexemes, &testpath, String::from("project"));
-        let mut proj_alias_tokenizer = Tokenizer::new(proj_aliased_lexemes, &testpath, String::from("project"));
+        let mut proj_tokenizer = Tokenizer::new(proj_lexemes, &testpath, String::from("pkg"));
+        let mut std_tokenizer = Tokenizer::new(std_lexemes, &testpath, String::from("pkg"));
+        let mut proj_alias_tokenizer = Tokenizer::new(proj_aliased_lexemes, &testpath, String::from("pkg"));
 
         let projtokens = proj_tokenizer.tokenize();
         let stdtokens = std_tokenizer.tokenize();
         let projaliastokens = proj_alias_tokenizer.tokenize();
 
-        let expected_proj_import = Import::Project(
-            "project.mymod.HelloWorld".to_string(),
+        let expected_proj_import = Import::Pkg(
+            "pkg.mymod.HelloWorld".to_string(),
             "HelloWorld".to_string(),
             get_test_sample_file("src/mymod.saha")
         );
@@ -606,8 +606,8 @@ mod tests {
             "Foobar".to_string(),
         );
 
-        let expected_projalias_import = Import::Project(
-            "project.mymod.HelloWorld".to_string(),
+        let expected_projalias_import = Import::Pkg(
+            "pkg.mymod.HelloWorld".to_string(),
             "HiyaWorld".to_string(),
             get_test_sample_file("src/mymod.saha")
         );
@@ -651,7 +651,7 @@ mod tests {
             Lexeme::Symbol(testfilepos(), ";".to_string()),
         ];
 
-        let mut fail_tokenizer = Tokenizer::new(fail_lexemes, &testpath, String::from("project"));
+        let mut fail_tokenizer = Tokenizer::new(fail_lexemes, &testpath, String::from("pkg"));
 
         let fail_tokens = fail_tokenizer.tokenize();
 
@@ -667,12 +667,12 @@ mod tests {
         let lexemes = vec![
             Lexeme::Word(lexemepos.clone(), "use".to_string()),
             Lexeme::Whitespace(lexemepos.clone(), " ".to_string()),
-            Lexeme::Word(lexemepos.clone(), "project.mymod.HelloWorld".to_string()),
+            Lexeme::Word(lexemepos.clone(), "pkg.mymod.HelloWorld".to_string()),
             Lexeme::Symbol(lexemepos.clone(), ";".to_string()),
             Lexeme::Newline(lexemepos.clone()),
             Lexeme::Word(lexemepos.clone(), "use".to_string()),
             Lexeme::Whitespace(lexemepos.clone(), " ".to_string()),
-            Lexeme::Word(lexemepos.clone(), "project.mymod.FooestOfBars".to_string()),
+            Lexeme::Word(lexemepos.clone(), "pkg.mymod.FooestOfBars".to_string()),
             Lexeme::Whitespace(lexemepos.clone(), " ".to_string()),
             Lexeme::Word(lexemepos.clone(), "as".to_string()),
             Lexeme::Whitespace(lexemepos.clone(), " ".to_string()),
@@ -703,14 +703,14 @@ mod tests {
             Lexeme::Symbol(lexemepos.clone(), "}".to_string()),
         ];
 
-        let import1 = Import::Project(
-            "project.mymod.HelloWorld".to_string(),
+        let import1 = Import::Pkg(
+            "pkg.mymod.HelloWorld".to_string(),
             "HelloWorld".to_string(),
             get_test_sample_file("src/mymod.saha")
         );
 
-        let import2 = Import::Project(
-            "project.mymod.FooestOfBars".to_string(),
+        let import2 = Import::Pkg(
+            "pkg.mymod.FooestOfBars".to_string(),
             "Foibar".to_string(),
             get_test_sample_file("src/mymod.saha")
         );
@@ -719,24 +719,24 @@ mod tests {
             Token::Import(lexemepos.clone(), import1),
             Token::Import(lexemepos.clone(), import2),
             Token::KwFunction(lexemepos.clone()),
-            Token::Name(lexemepos.clone(), "project.main".to_string(), "main".to_string()),
+            Token::Name(lexemepos.clone(), "pkg.main".to_string(), "main".to_string()),
             Token::ParensOpen(lexemepos.clone()),
             Token::ParensClose(lexemepos.clone()),
             Token::CurlyOpen(lexemepos.clone()),
             Token::KwVar(lexemepos.clone()),
-            Token::Name(lexemepos.clone(), "project.mymod.HelloWorld".to_string(), "HelloWorld".to_string()),
+            Token::Name(lexemepos.clone(), "pkg.mymod.HelloWorld".to_string(), "HelloWorld".to_string()),
             Token::SingleQuote(lexemepos.clone()),
             Token::Name(lexemepos.clone(), "hw".to_string(), "hw".to_string()),
             Token::EndStatement(lexemepos.clone()),
             Token::KwVar(lexemepos.clone()),
-            Token::Name(lexemepos.clone(), "project.mymod.FooestOfBars".to_string(), "Foibar".to_string()),
+            Token::Name(lexemepos.clone(), "pkg.mymod.FooestOfBars".to_string(), "Foibar".to_string()),
             Token::SingleQuote(lexemepos.clone()),
             Token::Name(lexemepos.clone(), "foobar".to_string(), "foobar".to_string()),
             Token::EndStatement(lexemepos.clone()),
             Token::CurlyClose(lexemepos.clone()),
         ];
 
-        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::from("project"));
+        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::from("pkg"));
 
         let tokens = tokenizer.tokenize();
 
@@ -750,7 +750,7 @@ mod tests {
         let lexemes = vec![
             Lexeme::Word(testfilepos(), "use".to_string()),
             Lexeme::Whitespace(testfilepos(), " ".to_string()),
-            Lexeme::Word(testfilepos(), "project.mymod.HelloBehavior".to_string()),
+            Lexeme::Word(testfilepos(), "pkg.mymod.HelloBehavior".to_string()),
             Lexeme::Symbol(testfilepos(), ";".to_string()),
 
             Lexeme::Newline(testfilepos()),
@@ -771,23 +771,23 @@ mod tests {
             Lexeme::Symbol(testfilepos(), "}".to_string())
         ];
 
-        let import1 = Import::Project(
-            "project.mymod.HelloBehavior".to_string(),
+        let import1 = Import::Pkg(
+            "pkg.mymod.HelloBehavior".to_string(),
             "HelloBehavior".to_string(),
             get_test_sample_file("src/mymod.saha")
         );
 
-        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::from("project"));
+        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::from("pkg"));
 
         let tokens = tokenizer.tokenize();
 
         let expected = vec![
             Token::Import(testfilepos(), import1),
             Token::KwClass(testfilepos()),
-            Token::Name(testfilepos(), "project.MyClass".to_string(), "MyClass".to_string()),
+            Token::Name(testfilepos(), "pkg.MyClass".to_string(), "MyClass".to_string()),
             Token::CurlyOpen(testfilepos()),
             Token::KwImplements(testfilepos()),
-            Token::Name(testfilepos(), "project.mymod.HelloBehavior".to_string(), "HelloBehavior".to_string()),
+            Token::Name(testfilepos(), "pkg.mymod.HelloBehavior".to_string(), "HelloBehavior".to_string()),
             Token::EndStatement(testfilepos()),
             Token::CurlyClose(testfilepos()),
         ];

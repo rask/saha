@@ -5,7 +5,7 @@
 function main() int
 {
     // Define a variable of type `str`
-    var str'hello_world_value = "Hello world!";
+    var hello_world_value'str = "Hello world!";
 
     // Print a value to stdout
     print(value = hello_world_value);

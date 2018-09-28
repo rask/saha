@@ -435,7 +435,7 @@ impl ContainsImports for Vec<Token> {
             match t {
                 Token::Import(_, import) => {
                     match import {
-                        Import::Project(module, _, ref path) => {
+                        Import::Pkg(module, _, ref path) => {
                             let mut modparts: Vec<&str> = module.split('.').collect();
                             modparts.pop();
                             let modulepath = modparts.join(".");

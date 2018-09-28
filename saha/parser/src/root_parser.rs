@@ -955,7 +955,7 @@ mod tests {
     fn test_it_parses_function_declarations() {
         let tokens = vec![
             Token::KwFunction(testfilepos()),
-            Token::Name(testfilepos(), "project.main".to_string(), "main".to_string()),
+            Token::Name(testfilepos(), "pkg.main".to_string(), "main".to_string()),
             Token::ParensOpen(testfilepos()),
             Token::ParensClose(testfilepos()),
             Token::TypeInteger(testfilepos()),
@@ -977,20 +977,20 @@ mod tests {
             }
         }
 
-        let fndefinition = parse_table.functions.get("project.main").unwrap();
+        let fndefinition = parse_table.functions.get("pkg.main").unwrap();
 
         assert_eq!(SahaType::Int, fndefinition.return_type);
         assert_eq!(1, fndefinition.body_tokens.len()); // should contain only an EOB
         assert_eq!(0, fndefinition.parameters.len());
         assert_eq!("main".to_string(), fndefinition.source_name);
-        assert_eq!("project.main".to_string(), fndefinition.name);
+        assert_eq!("pkg.main".to_string(), fndefinition.name);
     }
 
     #[test]
     fn test_function_parameters_are_parsed_properly() {
         let tokens = vec![
             Token::KwFunction(testfilepos()),
-            Token::Name(testfilepos(), "project.main".to_string(), "main".to_string()),
+            Token::Name(testfilepos(), "pkg.main".to_string(), "main".to_string()),
             Token::ParensOpen(testfilepos()),
 
             // params
@@ -1024,7 +1024,7 @@ mod tests {
             }
         }
 
-        let fndefinition = parse_table.functions.get("project.main").unwrap();
+        let fndefinition = parse_table.functions.get("pkg.main").unwrap();
         let params = fndefinition.parameters.clone();
 
         let foo_param = params.get("foo").unwrap();
@@ -1042,7 +1042,7 @@ mod tests {
     fn test_function_bodies_are_parsed_properly() {
         let tokens = vec![
             Token::KwFunction(testfilepos()),
-            Token::Name(testfilepos(), "project.main".to_string(), "main".to_string()),
+            Token::Name(testfilepos(), "pkg.main".to_string(), "main".to_string()),
             Token::ParensOpen(testfilepos()),
             Token::ParensClose(testfilepos()),
             Token::TypeInteger(testfilepos()),
@@ -1085,7 +1085,7 @@ mod tests {
             }
         }
 
-        let fndefinition = parse_table.functions.get("project.main").unwrap();
+        let fndefinition = parse_table.functions.get("pkg.main").unwrap();
 
         assert_eq!(18, fndefinition.body_tokens.len());
     }
@@ -1094,7 +1094,7 @@ mod tests {
     fn test_empty_classes_are_parsed_properly() {
         let tokens = vec![
             Token::KwClass(testfilepos()),
-            Token::Name(testfilepos(), "project.MyClass".to_string(), "MyClass".to_string()),
+            Token::Name(testfilepos(), "pkg.MyClass".to_string(), "MyClass".to_string()),
             Token::CurlyOpen(testfilepos()),
             Token::CurlyClose(testfilepos()),
             Token::Eof(testfilepos())
@@ -1113,22 +1113,22 @@ mod tests {
             }
         }
 
-        let class_definition = parse_table.classes.get("project.MyClass").unwrap();
+        let class_definition = parse_table.classes.get("pkg.MyClass").unwrap();
 
-        assert_eq!("project.MyClass".to_string(), class_definition.name);
+        assert_eq!("pkg.MyClass".to_string(), class_definition.name);
     }
 
     #[test]
     fn test_classes_are_parsed_properly() {
         let tokens = vec![
             Token::KwClass(testfilepos()),
-            Token::Name(testfilepos(), "project.MyClass".to_string(), "MyClass".to_string()),
+            Token::Name(testfilepos(), "pkg.MyClass".to_string(), "MyClass".to_string()),
             Token::CurlyOpen(testfilepos()),
 
             Token::KwImplements(testfilepos()),
-            Token::Name(testfilepos(), "project.MyBehavior".to_string(), "MyBehavior".to_string()),
+            Token::Name(testfilepos(), "pkg.MyBehavior".to_string(), "MyBehavior".to_string()),
             Token::Comma(testfilepos()),
-            Token::Name(testfilepos(), "project.MyOtherBehavior".to_string(), "MyBehavior".to_string()),
+            Token::Name(testfilepos(), "pkg.MyOtherBehavior".to_string(), "MyBehavior".to_string()),
             Token::EndStatement(testfilepos()),
 
             Token::KwProperty(testfilepos()),
@@ -1175,16 +1175,16 @@ mod tests {
             }
         }
 
-        let class_definition = parse_table.classes.get("project.MyClass").unwrap();
+        let class_definition = parse_table.classes.get("pkg.MyClass").unwrap();
 
         let cimpl = class_definition.implements.clone();
         let cmeth = class_definition.methods.clone();
         let cprop = class_definition.properties.clone();
 
-        assert_eq!("project.MyClass".to_string(), class_definition.name);
+        assert_eq!("pkg.MyClass".to_string(), class_definition.name);
 
         assert_eq!(2, cimpl.len());
-        assert_eq!("project.MyBehavior".to_string(), cimpl[0]);
+        assert_eq!("pkg.MyBehavior".to_string(), cimpl[0]);
 
         assert_eq!(2, cmeth.len());
         assert_eq!("helloThere".to_string(), cmeth.get("helloThere").unwrap().name);
@@ -1210,7 +1210,7 @@ mod tests {
     fn test_behaviors_are_parsed_properly() {
         let tokens = vec![
             Token::KwBehavior(testfilepos()),
-            Token::Name(testfilepos(), "project.MyBehavior".to_string(), "MyBehavior".to_string()),
+            Token::Name(testfilepos(), "pkg.MyBehavior".to_string(), "MyBehavior".to_string()),
             Token::CurlyOpen(testfilepos()),
 
             Token::Name(testfilepos(), "getSomeValue".to_string(), "getSomeValue".to_string()),
@@ -1250,9 +1250,9 @@ mod tests {
             }
         }
 
-        let behavior_definition = parse_table.behaviors.get("project.MyBehavior").unwrap();
+        let behavior_definition = parse_table.behaviors.get("pkg.MyBehavior").unwrap();
 
-        assert_eq!("project.MyBehavior".to_string(), behavior_definition.name);
+        assert_eq!("pkg.MyBehavior".to_string(), behavior_definition.name);
         assert_eq!(SahaType::Void, behavior_definition.methods.get("otherMethod").unwrap().parameters.get("param1").unwrap().default.kind);
     }
 

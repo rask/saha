@@ -30,6 +30,9 @@ pub struct FunctionParameter {
 pub trait ValidatesArgs {
     /// Validate a collection of function/method call arguments.
     fn validate_args(&self, args: SahaFunctionArguments) -> Result<(), RuntimeError>;
+
+    /// Validate args in case there is only a single parameter defined.
+    fn validate_single_param_args(&self, args: SahaFunctionArguments) -> Result<(), RuntimeError>;
 }
 
 /// Anything which can be called in Saha. Functions and methods mainly.
@@ -146,7 +149,60 @@ impl SahaCallable for UserFunction {
 }
 
 impl ValidatesArgs for SahaFunctionParamDefs {
+    /// Validate args in a situation where there is only a single parameter defined, which means
+    /// we can call the function with no parameter name defined (to make code a little leaner).
+    fn validate_single_param_args(&self, args: SahaFunctionArguments) -> Result<(), RuntimeError> {
+        let param_name = self.keys().nth(0).unwrap();
+        let param = self.values().nth(0).unwrap();
+        let param_default = &param.default;
+        let param_type = &param.param_type;
+
+        if let SahaType::Void = param_default.kind {
+            if args.is_empty() {
+                // no arg and no default, which is a no-no
+                let err = RuntimeError::new(
+                    &format!("Invalid arguments, argument `{}` missing", param_name),
+                    None
+                );
+
+                return Err(err.with_type("InvalidArgumentError"));
+            } else {
+                // no arg given, but a default is provided, so we're good
+                return Ok(());
+            }
+        }
+
+        let arg = args.values().nth(0).unwrap();
+
+        // arg type mismatch
+        if arg.kind != *param_type {
+            let err = RuntimeError::new(
+                &format!(
+                    "Invalid argument, `{}` is expected to be a `{}`, found `{}` instead",
+                    param_name,
+                    param_type.to_readable_string(),
+                    arg.kind.to_readable_string()
+                ),
+                None
+            );
+
+            return Err(err.with_type("InvalidArgumentError"));
+        }
+
+        // all OK for this arg
+
+        return Ok(());
+    }
+
     fn validate_args(&self, args: SahaFunctionArguments) -> Result<(), RuntimeError> {
+        let mut allow_call_without_arg_name = false;
+
+        if self.keys().len() == 1 {
+            // if a function accepts only a single argument, we allow calling without setting a
+            // parameter name (will use `""` internally)
+            return self.validate_single_param_args(args);
+        }
+
         for (name, ref param) in self {
             let param_type = param.param_type.to_owned();
             let param_default = param.default.to_owned();
@@ -154,12 +210,14 @@ impl ValidatesArgs for SahaFunctionParamDefs {
             // arg missing, see if default is provided
             if args.contains_key(name) == false {
                 match param_default.kind {
-                    SahaType::Void => return Err(
-                        RuntimeError::new(
+                    SahaType::Void => {
+                        let err = RuntimeError::new(
                             &format!("Invalid arguments, argument `{}` missing", name),
                             None
-                        )
-                    ),
+                        );
+
+                        return Err(err.with_type("InvalidArgumentError"));
+                    }
                     _ => ()
                 };
             }

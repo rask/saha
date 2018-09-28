@@ -7,9 +7,9 @@ use std::path::PathBuf;
 /// Import definition.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Import {
-    /// Project level import. Contains member to import and the aliased name to use for it.
+    /// Package level import. Contains member to import and the aliased name to use for it.
     /// Also the file path to import is included.
-    Project(String, String, PathBuf),
+    Pkg(String, String, PathBuf),
 
     /// Standard library level import. Contains member to import and the aliased name to use for it.
     Std(String, String),

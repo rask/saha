@@ -149,10 +149,7 @@ pub enum ExpressionKind {
     /// Literal values in source.
     LiteralValue(Value),
 
-    /// A single identifier, e.g. a variable name.
-    Ident(Identifier),
-
-    /// Identifier path. Examples:
+    /// Identifier path. The vec can be empty meaning a single identifier is only used. Examples:
     ///
     /// ```saha
     /// name

@@ -62,7 +62,9 @@ fn populate_functions(parse_table: &ParseTable) -> Result<(), ParseError> {
             name: func.name,
             params: func.parameters,
             return_type: func.return_type,
-            ast: ast
+            ast: ast,
+            is_public: true,
+            is_static: false
         };
 
         st.add_function(Box::new(func));

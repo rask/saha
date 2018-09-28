@@ -22,7 +22,7 @@ use std::{
 
 use saha_lib::{
     source::files::FilePosition,
-    errors::{Error, ParseError}
+    errors::{Error, ParseError, RuntimeError}
 };
 
 use saha_tokenizer::tokenize;
@@ -67,8 +67,18 @@ fn parse_saha_source(args: &cli::InterpreterArgs) -> Result<(), ParseError> {
 
     let tokenized_source = tokenize(&entrypoint)?;
 
+    // Parse tokens into declarations and definitions into the global symbol table.
     parse_tokens(&tokenized_source);
 
+    return Ok(());
+}
+
+/// Load Saha core, meaning stdlib, extensions, and such.
+fn load_saha_core() -> Result<(), StartupError> {
+    return Ok(());
+}
+
+fn run_saha_main() -> Result<(), RuntimeError> {
     return Ok(());
 }
 
@@ -86,10 +96,27 @@ fn run_interpreter(args: cli::InterpreterArgs) -> i32 {
         return 1;
     }
 
+    let core_loaded = load_saha_core();
+
+    if core_loaded.is_err() {
+        eprintln!("{}", core_loaded.err().unwrap().format());
+        return 1;
+    }
+
     let parse_result = parse_saha_source(&args);
 
     if parse_result.is_err() {
         eprintln!("{}", parse_result.err().unwrap().format());
+        return 1;
+    }
+
+    // At this point we should have core and extensions loaded, and we also have read, tokenized,
+    // and parsed our Saha source code. The symbol table is ready and now we just need to call the
+    // application main().
+    let run_result = run_saha_main();
+
+    if run_result.is_err() {
+        eprintln!("{}", run_result.err().unwrap().format());
         return 1;
     }
 
@@ -115,7 +142,7 @@ fn run_version() -> i32 {
     }
 
     println!("Saha {}", env!("CARGO_PKG_VERSION"));
-    println!("    ABI: rustc-{}", get_rustc_version());
+    println!("ABI: rustc-{}", get_rustc_version());
     return 0;
 }
 

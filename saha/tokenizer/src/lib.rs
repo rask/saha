@@ -37,7 +37,7 @@ pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
     let mut path_to_tokenize: PathBuf;
 
     let mut lexemes = lexemize_source_file(file)?;
-    let mut tokens: Vec<Token> = tokenize_lexemes(lexemes, file, String::from("project"))?;
+    let mut tokens: Vec<Token> = tokenize_lexemes(lexemes, file, String::from("pkg"))?;
 
     already_tokenized_paths.push(file.to_owned());
     tokenized_files.insert(file.to_owned(), tokens.clone());
@@ -96,7 +96,7 @@ pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
             match tok {
                 Token::Import(_, import) => {
                     match import {
-                        Import::Project(..) => false,
+                        Import::Pkg(..) => false,
                         _ => true
                     }
                 },
@@ -141,7 +141,7 @@ mod tests {
         let expected: Vec<Token> = vec![
             // imported file qwerty
             Token::KwFunction(fpos(&usefile2, 1, 1)),
-            Token::Name(fpos(&usefile2, 1, 10), "project.flatten_once_more.qwerty".to_string(), "qwerty".to_string()),
+            Token::Name(fpos(&usefile2, 1, 10), "pkg.flatten_once_more.qwerty".to_string(), "qwerty".to_string()),
             Token::ParensOpen(fpos(&usefile2, 1, 16)),
             Token::ParensClose(fpos(&usefile2, 1, 17)),
             Token::CurlyOpen(fpos(&usefile2, 1, 19)),
@@ -150,7 +150,7 @@ mod tests {
 
             // imported file foobar
             Token::KwFunction(fpos(&usefile, 3, 1)),
-            Token::Name(fpos(&usefile, 3, 10), "project.flatten_from.foobar".to_string(), "foobar".to_string()),
+            Token::Name(fpos(&usefile, 3, 10), "pkg.flatten_from.foobar".to_string(), "foobar".to_string()),
             Token::ParensOpen(fpos(&usefile, 3, 16)),
             Token::ParensClose(fpos(&usefile, 3, 17)),
             Token::CurlyOpen(fpos(&usefile, 3, 19)),
@@ -159,7 +159,7 @@ mod tests {
 
             // main file
             Token::KwFunction(fpos(&mainfile, 4, 1)),
-            Token::Name(fpos(&mainfile, 4, 10), "project.main".to_string(), "main".to_string()),
+            Token::Name(fpos(&mainfile, 4, 10), "pkg.main".to_string(), "main".to_string()),
             Token::ParensOpen(fpos(&mainfile, 4, 14)),
             Token::ParensClose(fpos(&mainfile, 4, 15)),
             Token::TypeInteger(fpos(&mainfile, 4, 17)),

@@ -1,5 +1,5 @@
-use project.flatten_from.foobar;
-use project.flatten_once_more.qwerty;
+use pkg.flatten_from.foobar;
+use pkg.flatten_once_more.qwerty;
 
 function main() int {
     return 0;
