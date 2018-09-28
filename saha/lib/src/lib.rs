@@ -19,7 +19,7 @@ use std::{
     sync::{Arc, Mutex}
 };
 
-use symbol_table::SymbolTable;
+use self::symbol_table::SymbolTable;
 
 lazy_static! {
     pub static ref SAHA_SYMBOL_TABLE: Arc<Mutex<SymbolTable>> = Arc::new(Mutex::new(SymbolTable::new()));

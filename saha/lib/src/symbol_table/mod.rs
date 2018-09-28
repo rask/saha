@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use ::{
+use crate::{
     errors::{Error, ParseError},
     types::{
         Value,

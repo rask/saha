@@ -15,7 +15,7 @@ use std::{
     }
 };
 
-use ::symbol_table::InstRef;
+use crate::symbol_table::InstRef;
 
 /// Saha types.
 #[derive(Clone, Debug, PartialEq)]

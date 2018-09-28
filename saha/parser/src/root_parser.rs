@@ -26,7 +26,7 @@ use saha_lib::{
 
 use saha_tokenizer::token::Token;
 
-use ::{
+use crate::{
     parse_table::{
         ParseTable,
         FunctionDefinition,

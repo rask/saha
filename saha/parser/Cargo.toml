@@ -2,6 +2,7 @@
 name = "saha_parser"
 version = "0.1.0"
 authors = ["Otto Rask"]
+edition = "2018"
 
 [dependencies]
 saha_lib = { path = "../lib" }

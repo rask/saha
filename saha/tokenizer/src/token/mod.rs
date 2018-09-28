@@ -9,7 +9,7 @@ use std::{
     fmt::{Display, Result as FmtResult, Formatter}
 };
 use saha_lib::source::FilePosition;
-use ::imports::Import;
+use crate::imports::Import;
 
 /// A single tokenized piece of Saha source code.
 #[derive(Debug, Clone, PartialEq)]

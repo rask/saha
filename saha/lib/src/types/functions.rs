@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use ::{
+use crate::{
     types::{Value, SahaType},
     errors::{Error, RuntimeError},
     source::FilePosition,

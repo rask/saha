@@ -145,14 +145,22 @@ pub struct ExpressionStack {
 /// Expression kinds.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionKind {
-    /// Expression wrapped in parentheses.
-    ParensExpression(Box<Expression>),
-
     /// Literal values in source.
     LiteralValue(Value),
 
     /// A single identifier, e.g. a variable name.
     Ident(Identifier),
+
+    /// Identifier path. Examples:
+    ///
+    /// ```saha
+    /// name
+    /// name->prop
+    /// name::static_prop->accessing
+    /// foo->bar->baz
+    /// qwert::yuiop
+    /// ```
+    IdentPath(Identifier, Vec<(AccessKind, Identifier)>),
 
     /// List declaration.
     ///

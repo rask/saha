@@ -16,7 +16,7 @@ use saha_lib::{
     source::FilePosition
 };
 
-use ::{
+use crate::{
     imports::Import,
     lexer::Lexeme,
     token::Token

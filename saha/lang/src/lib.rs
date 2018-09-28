@@ -20,9 +20,13 @@ use std::{
     path::PathBuf
 };
 
-use saha_lib::errors::{Error, ParseError};
+use saha_lib::{
+    source::FilePosition,
+    errors::{Error, ParseError}
+};
+
 use saha_tokenizer::tokenize;
-use errors::{StartupError, StartupResult};
+use self::errors::{StartupError, StartupResult};
 
 /// Validate if the given interpreter entrypoint file is a valid file for usage.
 ///
@@ -102,6 +106,11 @@ fn get_rustc_version() -> String {
 
 /// Display version information.
 fn run_version() -> i32 {
+
+    fn testfilepos() -> FilePosition {
+        return FilePosition::unknown();
+    }
+
     println!("Saha {}", env!("CARGO_PKG_VERSION"));
     println!("    ABI: rustc-{}", get_rustc_version());
     return 0;

@@ -30,11 +30,11 @@ use saha_lib::{
         functions::{SahaCallable, UserFunction}
     },
     errors::ParseError
-}
-;
+};
+
 use saha_tokenizer::token::Token;
 
-use ::{
+use crate::{
     parse_table::ParseTable,
     ast_parser::AstParser,
     root_parser::RootParser

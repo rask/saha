@@ -23,7 +23,7 @@ use saha_lib::{
     errors::{Error, ParseError}
 };
 
-use ::{
+use crate::{
     imports::Import,
     lexer::lexemize_source_file,
     tokenizer::tokenize_lexemes,

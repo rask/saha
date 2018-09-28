@@ -1,7 +1,8 @@
 # Saha Programming Language
 
 >   Currently under alpha version development. No feature or documentation is
->   to be considered stable or correct.
+>   to be considered stable or correct. Development is happening on 2018 Edition
+>   (RC1 as of writing).
 
 This is the monorepo for the Saha programming language.
 
