@@ -13,7 +13,7 @@ use crate::{
     types::{
         Value,
         functions::SahaCallable,
-        objects::SahaObject
+        objects::{SahaObject, ClassDefinition, BehaviorDefinition}
     }
 };
 
@@ -24,10 +24,10 @@ pub type InstRef = [u8; 16];
 /// to references to things that should be available globally.
 pub struct SymbolTable {
     constants: HashMap<String, Value>,
-    functions: HashMap<String, Box<SahaCallable>>,
-    behaviors: HashMap<String, ()>,
-    classes: HashMap<String, ()>,
-    instances: HashMap<InstRef, Box<SahaObject>>,
+    functions: HashMap<String, Box<dyn SahaCallable>>,
+    behaviors: HashMap<String, BehaviorDefinition>,
+    classes: HashMap<String, ClassDefinition>,
+    instances: HashMap<InstRef, Box<dyn SahaObject>>,
 }
 
 impl SymbolTable {
@@ -48,8 +48,11 @@ impl SymbolTable {
     }
 
     /// Add a new function/callable.
-    pub fn add_function(&mut self, func: Box<SahaCallable>) {
-        unimplemented!()
+    pub fn add_function(&mut self, func: Box<dyn SahaCallable>) {
+        let fn_name = func.get_name().clone();
+
+        // FIXME prevent overrides
+        self.functions.insert(fn_name, func);
     }
 
     /// Get a new random UUID types type instance reference.

@@ -4,12 +4,16 @@
 //! together an abstract syntax tree. Tokens are parsed from lexemes.
 
 use noisy_float::prelude::*;
+
 use std::{
     path::PathBuf,
     fmt::{Display, Result as FmtResult, Formatter}
 };
-use saha_lib::source::FilePosition;
-use crate::imports::Import;
+
+use crate::source::{
+    files::FilePosition,
+    import::Import
+};
 
 /// A single tokenized piece of Saha source code.
 #[derive(Debug, Clone, PartialEq)]

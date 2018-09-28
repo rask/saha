@@ -12,14 +12,12 @@
 //! After parsing is done we have a ready to interpret application.
 
 extern crate saha_lib;
-extern crate saha_tokenizer;
 extern crate noisy_float;
 
 mod parse_table;
 mod parser;
 mod root_parser;
 mod ast_parser;
-mod ast;
 
 use std::collections::HashMap;
 
@@ -29,10 +27,9 @@ use saha_lib::{
         Value,
         functions::{SahaCallable, UserFunction}
     },
-    errors::ParseError
+    errors::ParseError,
+    source::token::Token,
 };
-
-use saha_tokenizer::token::Token;
 
 use crate::{
     parse_table::ParseTable,
@@ -53,12 +50,22 @@ fn populate_constants(parse_table: &ParseTable) -> Result<(), ParseError> {
 fn populate_functions(parse_table: &ParseTable) -> Result<(), ParseError> {
     let funcs = parse_table.functions.to_owned();
 
-    let callables: HashMap<String, Box<SahaCallable>> = HashMap::new();
+    let mut st = SAHA_SYMBOL_TABLE.lock().unwrap();
 
     for (fname, func) in funcs {
         let mut parser = AstParser::new(&func.body_tokens);
 
         let ast = parser.start_parse()?;
+
+        let func = UserFunction {
+            source_name: func.source_name,
+            name: func.name,
+            params: func.parameters,
+            return_type: func.return_type,
+            ast: ast
+        };
+
+        st.add_function(Box::new(func));
     }
 
     return Ok(());
@@ -84,7 +91,7 @@ fn populate_global_symbol_table(parse_table: &ParseTable) -> Result<(), ParseErr
 }
 
 /// Parse a collection of tokens into a declaration table and ASTs.
-pub fn parse_tokens(tokens: Vec<Token>) -> Result<(), ParseError> {
+pub fn parse_tokens(tokens: &Vec<Token>) -> Result<(), ParseError> {
     let mut parse_table = ParseTable::new();
 
     {

@@ -10,6 +10,7 @@ extern crate uuid;
 extern crate lazy_static;
 extern crate noisy_float;
 
+pub mod ast;
 pub mod types;
 pub mod errors;
 pub mod source;

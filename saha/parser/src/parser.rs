@@ -5,13 +5,12 @@ use std::{
 };
 
 use saha_lib::{
-    source::FilePosition,
+    source::{
+        files::FilePosition,
+        token::Token,
+        import::Import,
+    },
     errors::{Error, ParseError}
-};
-
-use saha_tokenizer::{
-    token::Token,
-    imports::Import,
 };
 
 /// Parse result, either something or a parse error.

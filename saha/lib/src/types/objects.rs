@@ -56,6 +56,13 @@ pub struct ClassDefinition {
     implements: Vec<String>
 }
 
+/// Behavior definition, name and the requires methods.
+pub struct BehaviorDefinition {
+    name: String,
+    fqname: String,
+    methods: HashMap<String, Box<SahaCallable>>
+}
+
 /// Class member visibility, e.g. public or private.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemberVisibility {

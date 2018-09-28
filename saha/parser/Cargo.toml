@@ -6,5 +6,4 @@ edition = "2018"
 
 [dependencies]
 saha_lib = { path = "../lib" }
-saha_tokenizer = { path = "../tokenizer" }
 noisy_float = "0.1.*"

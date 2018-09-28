@@ -15,7 +15,10 @@ use saha_lib::{
         Error,
         ParseError
     },
-    source::FilePosition,
+    source::{
+        files::FilePosition,
+        token::Token,
+    },
     types::{
         SahaType,
         Value,
@@ -23,8 +26,6 @@ use saha_lib::{
         functions::{FunctionParameter, SahaFunctionParamDefs}
     }
 };
-
-use saha_tokenizer::token::Token;
 
 use crate::{
     parse_table::{

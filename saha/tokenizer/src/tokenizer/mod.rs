@@ -13,14 +13,14 @@ use std::{
 
 use saha_lib::{
     errors::{Error, ParseError},
-    source::FilePosition
+    source::{
+        files::FilePosition,
+        token::Token,
+        import::Import
+    }
 };
 
-use crate::{
-    imports::Import,
-    lexer::Lexeme,
-    token::Token
-};
+use crate::lexer::Lexeme;
 
 /// Result type for tokenization.
 type TokenizationResult = Result<Vec<Token>, ParseError>;

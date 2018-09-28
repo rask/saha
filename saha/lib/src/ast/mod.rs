@@ -9,12 +9,13 @@ use std::{
     collections::HashMap
 };
 
-use saha_lib::{
-    source::FilePosition,
+use crate::{
+    source::{
+        files::FilePosition,
+        token::Token,
+    },
     types::{Value, SahaType}
 };
-
-use saha_tokenizer::token::Token;
 
 /// AST. Contains a visitable tree of AST nodes that make the program magic
 /// happen. A single entrypoint in the form of a block is the first thing any

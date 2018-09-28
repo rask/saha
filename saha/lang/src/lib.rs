@@ -21,11 +21,12 @@ use std::{
 };
 
 use saha_lib::{
-    source::FilePosition,
+    source::files::FilePosition,
     errors::{Error, ParseError}
 };
 
 use saha_tokenizer::tokenize;
+use saha_parser::parse_tokens;
 use self::errors::{StartupError, StartupResult};
 
 /// Validate if the given interpreter entrypoint file is a valid file for usage.
@@ -65,6 +66,8 @@ fn parse_saha_source(args: &cli::InterpreterArgs) -> Result<(), ParseError> {
     }
 
     let tokenized_source = tokenize(&entrypoint)?;
+
+    parse_tokens(&tokenized_source);
 
     return Ok(());
 }

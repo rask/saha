@@ -6,7 +6,10 @@
 use std::collections::HashMap;
 
 use saha_lib::{
-    source::FilePosition,
+    source::{
+        files::FilePosition,
+        token::Token,
+    },
     types::{
         Value,
         SahaType,
@@ -14,8 +17,6 @@ use saha_lib::{
         functions::SahaFunctionParamDefs
     }
 };
-
-use saha_tokenizer::token::Token;
 
 /// Function defintion, from which a callable can be built from.
 #[derive(Clone)]

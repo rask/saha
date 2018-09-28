@@ -10,7 +10,7 @@ use std::{
 
 use saha_lib::{
     errors::{Error, ParseError},
-    source::FilePosition
+    source::files::FilePosition
 };
 
 /// Lexeme

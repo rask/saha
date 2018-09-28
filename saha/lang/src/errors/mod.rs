@@ -4,7 +4,7 @@
 //! a few error types related to startup errors and similar.
 
 use saha_lib::{
-    source::FilePosition,
+    source::files::FilePosition,
     errors::Error
 };
 

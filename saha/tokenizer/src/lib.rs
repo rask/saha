@@ -10,8 +10,6 @@ extern crate noisy_float;
 
 mod lexer;
 mod tokenizer;
-pub mod imports;
-pub mod token;
 
 use std::{
     env::current_dir,
@@ -20,14 +18,16 @@ use std::{
 };
 
 use saha_lib::{
-    errors::{Error, ParseError}
+    errors::{Error, ParseError},
+    source::{
+        import::Import,
+        token::{Token, ContainsImports}
+    }
 };
 
 use crate::{
-    imports::Import,
-    lexer::lexemize_source_file,
     tokenizer::tokenize_lexemes,
-    token::{Token, ContainsImports}
+    lexer::lexemize_source_file
 };
 
 /// Tokenize a Saha source file with imports.
@@ -114,7 +114,7 @@ pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use saha_lib::source::FilePosition;
+    use saha_lib::source::files::FilePosition;
 
     fn get_test_sample_file(sample_path: &str) -> PathBuf {
         let mut path = current_dir().unwrap(); // TODO does this work

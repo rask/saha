@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 
 use crate::{
+    ast::Ast,
     types::{Value, SahaType},
     errors::{Error, RuntimeError},
-    source::FilePosition,
+    source::files::FilePosition,
 };
 
 /// A result type for Saha callable `call`s. Returns either a Saha Value object
@@ -47,23 +48,33 @@ pub trait SahaCallable: Send {
 
     /// Get the name of this function as it appears in source code.
     fn get_source_name(&self) -> String;
+
+    /// Is this a static member callable?
+    fn is_static(&self) -> bool;
+
+    /// Is this a public member callable?
+    fn is_public(&self) -> bool;
 }
 
 /// Functions defined by the Saha core are CoreFunctions.
 pub struct CoreFunction {
-    name: String,
-    params: SahaFunctionParamDefs,
-    return_type: SahaType,
-    fn_ref: fn(args: SahaFunctionArguments) -> SahaCallResult
+    pub name: String,
+    pub params: SahaFunctionParamDefs,
+    pub return_type: SahaType,
+    pub fn_ref: fn(args: SahaFunctionArguments) -> SahaCallResult,
+    pub is_public: bool,
+    pub is_static: bool
 }
 
 /// Functions defined by Saha developers in userland source code.
 pub struct UserFunction {
-    source_name: String,
-    name: String,
-    params: SahaFunctionParamDefs,
-    return_type: SahaType,
-    ast: ()
+    pub source_name: String,
+    pub name: String,
+    pub params: SahaFunctionParamDefs,
+    pub return_type: SahaType,
+    pub ast: Ast,
+    pub is_public: bool,
+    pub is_static: bool
 }
 
 impl SahaCallable for CoreFunction {
@@ -90,6 +101,14 @@ impl SahaCallable for CoreFunction {
     fn get_source_name(&self) -> String {
         return self.get_name();
     }
+
+    fn is_public(&self) -> bool {
+        return self.is_public;
+    }
+
+    fn is_static(&self) -> bool {
+        return self.is_static;
+    }
 }
 
 impl SahaCallable for UserFunction {
@@ -115,6 +134,14 @@ impl SahaCallable for UserFunction {
 
     fn get_source_name(&self) -> String {
         return self.source_name.to_owned();
+    }
+
+    fn is_public(&self) -> bool {
+        return self.is_public;
+    }
+
+    fn is_static(&self) -> bool {
+        return self.is_static;
     }
 }
 

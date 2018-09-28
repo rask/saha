@@ -10,11 +10,15 @@ use std::{
 };
 
 use saha_lib::{
+    ast::*,
     errors::{
         Error,
         ParseError
     },
-    source::FilePosition,
+    source::{
+        files::FilePosition,
+        token::Token
+    },
     types::{
         SahaType,
         Value,
@@ -23,10 +27,7 @@ use saha_lib::{
     }
 };
 
-use saha_tokenizer::token::Token;
-
 use crate::{
-    ast::*,
     parser::{
         TokenType,
         PR,
@@ -301,13 +302,14 @@ impl<'a> AstParser<'a> {
             },
             Token::BraceOpen(..) => unimplemented!(),
             Token::CurlyOpen(..) => unimplemented!(),
-            Token::UnOpNot(..) => unimplemented!(),
-            Token::OpSub(..) => unimplemented!(),
+            Token::UnOpNot(..)
+            | Token::OpSub(..) => unimplemented!(),
             Token::StringValue(..)
             | Token::IntegerValue(..)
             | Token::FloatValue(..)
             | Token::BooleanValue(..) => self.parse_literal_value()?,
             Token::KwNew(..) => unimplemented!(),
+            Token::Name(..) => unimplemented!(),
             _ => unreachable!()
         };
 

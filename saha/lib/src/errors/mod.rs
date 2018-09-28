@@ -7,7 +7,7 @@
 //! the language.
 
 use std::fmt::Debug;
-use crate::source::FilePosition;
+use crate::source::files::FilePosition;
 
 /// Error trait
 ///
