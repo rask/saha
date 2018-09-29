@@ -1,5 +1,5 @@
 [package]
-name = "saha_lang"
+name = "saha_interpreter"
 version = "0.1.0"
 authors = ["Otto Rask"]
 edition = "2018"

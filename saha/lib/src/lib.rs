@@ -15,6 +15,7 @@ pub mod types;
 pub mod errors;
 pub mod source;
 pub mod symbol_table;
+mod interpreter;
 
 use std::{
     sync::{Arc, Mutex}

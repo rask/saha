@@ -38,6 +38,8 @@ pub trait SahaObject: Send {
     fn mutate_property(&mut self, static_access: bool, accessor_instref: Option<InstRef>) -> SahaCallResult;
 }
 
+/// A class property.
+#[derive(Clone)]
 pub struct Property {
     pub name: String,
     pub prop_type: SahaType,

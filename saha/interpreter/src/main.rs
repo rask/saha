@@ -2,10 +2,10 @@
 //!
 //! This is the Saha language interpreter.
 
-extern crate saha_lang;
+extern crate saha_interpreter;
 
 use std::process::exit;
-use saha_lang::run;
+use saha_interpreter::run;
 
 /// Interpreter entrypoint.
 fn main() {

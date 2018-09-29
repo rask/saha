@@ -15,6 +15,7 @@ mod cli;
 mod errors;
 
 use std::{
+    collections::HashMap,
     env::current_dir,
     ffi::OsString,
     path::PathBuf
@@ -22,7 +23,11 @@ use std::{
 
 use saha_lib::{
     source::files::FilePosition,
-    errors::{Error, ParseError, RuntimeError}
+    errors::{Error, ParseError, RuntimeError},
+    types::{
+        Value,
+        functions::{SahaCallable, SahaCallResult, UserFunction}
+    }
 };
 
 use saha_tokenizer::tokenize;
@@ -78,8 +83,23 @@ fn load_saha_core() -> Result<(), StartupError> {
     return Ok(());
 }
 
-fn run_saha_main() -> Result<(), RuntimeError> {
-    return Ok(());
+/// Run the `main()` of our input source code.
+fn run_saha_main() -> Result<i32, RuntimeError> {
+    let mainfn: UserFunction;
+
+    {
+        let st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
+        let main_callable = st.functions.get("pkg.main").clone().unwrap();
+
+        mainfn = (**main_callable).as_userfunction().clone();
+    }
+
+    let return_code_value: Value = mainfn.call(HashMap::new(), Some(FilePosition::unknown()))?;
+
+    // other checks should enforce that we're working with an integer
+    let return_code = return_code_value.int.unwrap_or(-255);
+
+    return Ok(return_code as i32);
 }
 
 /// Run the interpreter.
@@ -120,7 +140,7 @@ fn run_interpreter(args: cli::InterpreterArgs) -> i32 {
         return 1;
     }
 
-    return 0;
+    return run_result.ok().unwrap();
 }
 
 /// Get the rustc version on which this thing is built with. This information
@@ -136,11 +156,6 @@ fn get_rustc_version() -> String {
 
 /// Display version information.
 fn run_version() -> i32 {
-
-    fn testfilepos() -> FilePosition {
-        return FilePosition::unknown();
-    }
-
     println!("Saha {}", env!("CARGO_PKG_VERSION"));
     println!("ABI: rustc-{}", get_rustc_version());
     return 0;

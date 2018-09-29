@@ -23,11 +23,11 @@ pub type InstRef = [u8; 16];
 /// Symbol table, stores global parsed declarations and definitions, in addition
 /// to references to things that should be available globally.
 pub struct SymbolTable {
-    constants: HashMap<String, Value>,
-    functions: HashMap<String, Box<dyn SahaCallable>>,
-    behaviors: HashMap<String, BehaviorDefinition>,
-    classes: HashMap<String, ClassDefinition>,
-    instances: HashMap<InstRef, Box<dyn SahaObject>>,
+    pub constants: HashMap<String, Value>,
+    pub functions: HashMap<String, Box<dyn SahaCallable>>,
+    pub behaviors: HashMap<String, BehaviorDefinition>,
+    pub classes: HashMap<String, ClassDefinition>,
+    pub instances: HashMap<InstRef, Box<dyn SahaObject>>,
 }
 
 impl SymbolTable {

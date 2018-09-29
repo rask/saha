@@ -33,14 +33,11 @@ pub trait Error: Debug {
         }
 
         let pos = self.get_file_position().unwrap();
-        let (p, l, c) = (pos.path, pos.line, pos.column);
 
         return format!(
-            "Unexpected `{}`\n    at `{:?} -> {}:{}\n    {}",
+            "Unexpected `{}`\nat {:?}\n{}",
             self.get_name(),
-            p,
-            l,
-            c,
+            pos,
             self.get_message()
         );
     }

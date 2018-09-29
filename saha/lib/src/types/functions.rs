@@ -1,12 +1,14 @@
 //! Saha functions and related types
 
 use std::collections::HashMap;
+use std::any::Any;
 
 use crate::{
     ast::Ast,
     types::{Value, SahaType},
     errors::{Error, RuntimeError},
     source::files::FilePosition,
+    interpreter::AstVisitor
 };
 
 /// A result type for Saha callable `call`s. Returns either a Saha Value object
@@ -57,9 +59,33 @@ pub trait SahaCallable: Send {
 
     /// Is this a public member callable?
     fn is_public(&self) -> bool;
+
+    // internal
+    fn as_any(&self) -> &dyn Any;
+
+    // internal
+    fn as_userfunction(&self) -> &UserFunction {
+        let uf: &UserFunction = match self.as_any().downcast_ref::<UserFunction>() {
+            Some(u) => u,
+            None => panic!("Invalid internal callable cast, callable is not a user function")
+        };
+
+        return uf;
+    }
+
+    // internal
+    fn as_corefunction(&self) -> &CoreFunction {
+        let cf: &CoreFunction = match self.as_any().downcast_ref::<CoreFunction>() {
+            Some(u) => u,
+            None => panic!("Invalid internal callable cast, callable is not a core function")
+        };
+
+        return cf;
+    }
 }
 
 /// Functions defined by the Saha core are CoreFunctions.
+#[derive(Clone)]
 pub struct CoreFunction {
     pub name: String,
     pub params: SahaFunctionParamDefs,
@@ -70,6 +96,7 @@ pub struct CoreFunction {
 }
 
 /// Functions defined by Saha developers in userland source code.
+#[derive(Clone)]
 pub struct UserFunction {
     pub source_name: String,
     pub name: String,
@@ -112,15 +139,19 @@ impl SahaCallable for CoreFunction {
     fn is_static(&self) -> bool {
         return self.is_static;
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl SahaCallable for UserFunction {
     fn call(&self, args: SahaFunctionArguments, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(args)?;
 
-        let err = RuntimeError::new("Not implemented", call_source_position);
+        let ast_visitor = AstVisitor::new(&self.ast);
 
-        return Err(err.with_type("UnimplementedError"));
+        return ast_visitor.start();
     }
 
     fn get_parameters(&self) -> SahaFunctionParamDefs {
@@ -145,6 +176,10 @@ impl SahaCallable for UserFunction {
 
     fn is_static(&self) -> bool {
         return self.is_static;
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
