@@ -31,10 +31,10 @@ pub struct FunctionParameter {
 /// Anything that needs to validate call arguments.
 pub trait ValidatesArgs {
     /// Validate a collection of function/method call arguments.
-    fn validate_args(&self, args: SahaFunctionArguments) -> Result<(), RuntimeError>;
+    fn validate_args(&self, args: &SahaFunctionArguments) -> Result<(), RuntimeError>;
 
     /// Validate args in case there is only a single parameter defined.
-    fn validate_single_param_args(&self, args: SahaFunctionArguments) -> Result<(), RuntimeError>;
+    fn validate_single_param_args(&self, args: &SahaFunctionArguments) -> Result<(), RuntimeError>;
 }
 
 /// Anything which can be called in Saha. Functions and methods mainly.
@@ -60,6 +60,9 @@ pub trait SahaCallable: Send {
     /// Is this a public member callable?
     fn is_public(&self) -> bool;
 
+    /// Clone for boxed self.
+    fn box_clone(&self) -> Box<dyn SahaCallable>;
+
     // internal
     fn as_any(&self) -> &dyn Any;
 
@@ -81,6 +84,12 @@ pub trait SahaCallable: Send {
         };
 
         return cf;
+    }
+}
+
+impl Clone for Box<dyn SahaCallable> {
+    fn clone(&self) -> Box<dyn SahaCallable> {
+        return self.box_clone();
     }
 }
 
@@ -109,11 +118,9 @@ pub struct UserFunction {
 
 impl SahaCallable for CoreFunction {
     fn call(&self, args: SahaFunctionArguments, call_source_position: Option<FilePosition>) -> SahaCallResult {
-        self.params.validate_args(args)?;
+        self.params.validate_args(&args)?;
 
-        let err = RuntimeError::new("Not implemented", call_source_position);
-
-        return Err(err.with_type("UnimplementedError"));
+        return (self.fn_ref)(args);
     }
 
     fn get_parameters(&self) -> SahaFunctionParamDefs {
@@ -143,11 +150,15 @@ impl SahaCallable for CoreFunction {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn box_clone(&self) -> Box<dyn SahaCallable> {
+        return Box::new(self.clone());
+    }
 }
 
 impl SahaCallable for UserFunction {
     fn call(&self, args: SahaFunctionArguments, call_source_position: Option<FilePosition>) -> SahaCallResult {
-        self.params.validate_args(args)?;
+        self.params.validate_args(&args)?;
 
         let mut ast_visitor = AstVisitor::new(&self.ast);
 
@@ -181,12 +192,16 @@ impl SahaCallable for UserFunction {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn box_clone(&self) -> Box<dyn SahaCallable> {
+        return Box::new(self.clone());
+    }
 }
 
 impl ValidatesArgs for SahaFunctionParamDefs {
     /// Validate args in a situation where there is only a single parameter defined, which means
     /// we can call the function with no parameter name defined (to make code a little leaner).
-    fn validate_single_param_args(&self, args: SahaFunctionArguments) -> Result<(), RuntimeError> {
+    fn validate_single_param_args(&self, args: &SahaFunctionArguments) -> Result<(), RuntimeError> {
         let param_name = self.keys().nth(0).unwrap();
         let param = self.values().nth(0).unwrap();
         let param_default = &param.default;
@@ -229,13 +244,13 @@ impl ValidatesArgs for SahaFunctionParamDefs {
         return Ok(());
     }
 
-    fn validate_args(&self, args: SahaFunctionArguments) -> Result<(), RuntimeError> {
+    fn validate_args(&self, args: &SahaFunctionArguments) -> Result<(), RuntimeError> {
         let mut allow_call_without_arg_name = false;
 
         if self.keys().len() == 1 {
             // if a function accepts only a single argument, we allow calling without setting a
             // parameter name (will use `""` internally)
-            return self.validate_single_param_args(args);
+            return self.validate_single_param_args(&args);
         }
 
         for (name, ref param) in self {

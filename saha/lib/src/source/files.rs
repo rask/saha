@@ -17,7 +17,7 @@ use std::{
 pub struct FilePosition {
     pub path: PathBuf,
     pub line: usize,
-    pub column: u32
+    pub column: i32
 }
 
 impl FilePosition {
@@ -39,7 +39,7 @@ impl FilePosition {
         return FilePosition {
             path: self.path.clone(),
             line: self.line.clone(),
-            column: self.column + shift as u32
+            column: self.column + shift
         };
     }
 }

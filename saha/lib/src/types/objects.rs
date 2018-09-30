@@ -36,6 +36,15 @@ pub trait SahaObject: Send {
     /// Mutate (set) a member property. Determine static access and `self` similarly to
     /// `call_member()`.
     fn mutate_property(&mut self, static_access: bool, accessor_instref: Option<InstRef>) -> SahaCallResult;
+
+    /// Clone for boxed self.
+    fn box_clone(&self) -> Box<dyn SahaObject>;
+}
+
+impl Clone for Box<dyn SahaObject> {
+    fn clone(&self) -> Box<dyn SahaObject> {
+        return self.box_clone();
+    }
 }
 
 /// A class property.

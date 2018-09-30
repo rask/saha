@@ -349,12 +349,15 @@ impl<'a> AstParser<'a> {
         return Ok(primary);
     }
 
-    /// Parse a binary operation. First we parse the op and then the RHS expression. Then we check
-    /// if we should parse another binop.
+    /// Parse a binary operation. First we parse the op and then the RHS
+    /// expression. Then we check if we should parse another binop.
     fn parse_binop_expression(&mut self, lhs_expr: Box<Expression>, minimum_op_precedence: i8) -> PR<Box<Expression>> {
         self.consume_next(vec!["+", "-", "*", "/", "&&", "||", ">", "<", ">=", "<="])?;
 
         let op_token = self.ctok.unwrap();
+
+        holy heck this thing is broken, just clumps everything to right side which
+        breaks everything! FIXME
 
         let binop = BinOp::from_token(op_token);
 
@@ -372,7 +375,7 @@ impl<'a> AstParser<'a> {
             false => minimum_op_precedence
         };
 
-        let rhs_expression = self.parse_expression(next_min_precedence)?;
+        let rhs_expression = self.parse_expression(minimum_op_precedence)?;
 
         let binop_expr = Box::new(Expression {
             file_position: lhs_expr.file_position.to_owned(),
@@ -454,6 +457,11 @@ impl<'a> AstParser<'a> {
             };
 
             path_items.push((access_kind, item_ident));
+
+            next_is_access_token = match self.ntok.unwrap() {
+                Token::StaticAccess(..) | Token::ObjectAccess(..) => true,
+                _ => false
+            };
         }
 
         let path_expr = Expression {

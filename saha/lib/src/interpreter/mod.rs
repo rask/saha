@@ -13,8 +13,13 @@ use crate::{
     source::files::FilePosition,
     types::{
         Value, SahaType,
-        objects::SahaObject
+        objects::SahaObject,
+        functions::{
+            SahaFunctionArguments,
+            SahaCallable
+        }
     },
+    symbol_table::InstRef,
     errors::{Error, RuntimeError, ParseError}
 };
 
@@ -147,6 +152,20 @@ impl<'a> AstVisitor<'a> {
         } else {
             let def_expr = var_default.clone().unwrap();
             default_value = self.visit_expression(&def_expr)?;
+
+            if var_type != &default_value.kind {
+                let err = RuntimeError::new(
+                    &format!(
+                        "Mismatching type assigned to variable `{}`, expected `{:?}` but received `{:?}`",
+                        refname,
+                        var_type.to_readable_string(),
+                        default_value.kind.to_readable_string()
+                    ),
+                    Some(def_expr.file_position)
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
         }
 
         self.create_local_ref(refname, (var_type.to_owned(), default_value), refpos)?;
@@ -158,10 +177,23 @@ impl<'a> AstVisitor<'a> {
     fn visit_expression(&mut self, expression: &Box<Expression>) -> AstResult {
         match &expression.kind {
             ExpressionKind::LiteralValue(val) => Ok(val.clone()),
-            ExpressionKind::BinaryOperation(lhs, op, rhs) => self.visit_binop_expression(lhs, op, rhs),
+            ExpressionKind::BinaryOperation(lhs, op, rhs) => {
+                println!("{:?}", expression.kind);
+                self.visit_binop_expression(lhs, op, rhs)
+            },
             ExpressionKind::FunctionCall(identpath, call_args) => self.visit_callable_call(identpath, call_args),
-            _ => unimplemented!()
+            ExpressionKind::IdentPath(root, members) => self.visit_ident_path(root, members),
+            _ => unimplemented!("{:?}", expression.kind)
         }
+    }
+
+    /// Visit and resolve an identifier path expression to a value.
+    fn visit_ident_path(&mut self, root: &Identifier, members: &Vec<(AccessKind, Identifier)>) -> AstResult {
+        if members.is_empty() {
+            return self.get_local_ref(root.identifier.clone(), &root.file_position);
+        }
+
+        unimplemented!()
     }
 
     /// Visit a binary operation expression.
@@ -218,7 +250,7 @@ impl<'a> AstVisitor<'a> {
             (SahaType::Int, SahaType::Int) => Value::int(lhs_value.int.unwrap() - rhs_value.int.unwrap()),
             _ => {
                 let err = RuntimeError::new(
-                    &format!("Mismatching operands for operation: `{:?} + {:?}`", lkstr, rkstr),
+                    &format!("Mismatching operands for operation: `{:?} - {:?}`", lkstr, rkstr),
                     Some(op_pos.clone())
                 );
 
@@ -242,7 +274,7 @@ impl<'a> AstVisitor<'a> {
             (SahaType::Int, SahaType::Int) => Value::int(lhs_value.int.unwrap() * rhs_value.int.unwrap()),
             _ => {
                 let err = RuntimeError::new(
-                    &format!("Mismatching operands for operation: `{:?} + {:?}`", lkstr, rkstr),
+                    &format!("Mismatching operands for operation: `{:?} * {:?}`", lkstr, rkstr),
                     Some(op_pos.clone())
                 );
 
@@ -282,7 +314,7 @@ impl<'a> AstVisitor<'a> {
             },
             _ => {
                 let err = RuntimeError::new(
-                    &format!("Mismatching operands for operation: `{:?} + {:?}`", lkstr, rkstr),
+                    &format!("Mismatching operands for operation: `{:?} / {:?}`", lkstr, rkstr),
                     Some(op_pos.clone())
                 );
 
@@ -337,56 +369,149 @@ impl<'a> AstVisitor<'a> {
 
     /// Visit a callable call.
     fn visit_callable_call(&mut self, ident_path: &Box<Expression>, args: &Box<Expression>) -> AstResult {
-        let (owner, callable) = self.resolve_ident_path(ident_path)?;
+        let (owner, acckind, callable) = self.resolve_ident_path(ident_path)?;
 
         if owner.is_none() {
             return self.call_function(&callable, args);
         } else {
-            return self.call_method(&owner.unwrap(), &callable, args);
+            // FIXME remove the default access kind and fail better
+            return self.call_method(&owner.unwrap(), &acckind.unwrap_or(AccessKind::Instance), &callable, args);
         }
     }
 
     /// Resolve an identifier path. First tuple member is a instref value
-    /// (optional), second is the callable name.
-    fn resolve_ident_path(&mut self, path: &Box<Expression>) -> Result<(Option<Value>, Identifier), RuntimeError> {
-        let mut callable: Identifier; // callable name
+    /// (optional), second is the method or property name.
+    fn resolve_ident_path(&mut self, path: &Box<Expression>) -> Result<(Option<Value>, Option<AccessKind>, Identifier), RuntimeError> {
+        let mut member: Identifier; // callable name
         let mut owner: Option<Value> = None; // instref
+        let mut last_access_kind: Option<AccessKind> = None; // inst or static access?
 
         match &path.kind {
             ExpressionKind::IdentPath(root, members) => {
                 if members.is_empty() {
-                    callable = root.clone();
-                    owner = None;
+                    member = root.clone();
                 } else {
-                    unimplemented!();
-                    let rootname = root;
-                    let mut rootinst = self.resolve_local_name(rootname)?;
-                    let mut accesskind: AccessKind;
-                    let mut membername: String;
+                    let mut memberpath = members.clone();
+                    let mut obj_being_accessed: Option<Value> = Some(self.resolve_local_name(&root)?);
 
-                    for (ak, mn) in members {
+                    loop {
+                        let (acckind, mname) = memberpath.remove(0);
 
+                        if memberpath.is_empty() {
+                            member = mname;
+                            owner = obj_being_accessed;
+                            last_access_kind = Some(acckind);
+                            break;
+                        }
+
+                        obj_being_accessed = Some(self.access_object_property(obj_being_accessed.unwrap(), acckind, mname)?);
                     }
                 }
             },
             _ => unreachable!()
         }
 
-        return Ok((owner, callable));
+        return Ok((owner, last_access_kind, member));
+    }
+
+    /// Access an object property and get the value it contains.
+    fn access_object_property(&mut self, obj: Value, access_kind: AccessKind, property_name: Identifier) -> AstResult {
+        unimplemented!()
     }
 
     /// Resolve an identifier name to a local ref table value.
     fn resolve_local_name(&mut self, name: &Identifier) -> AstResult {
-        unimplemented!()
+        let refvalue: Value = self.get_local_ref(name.identifier.clone(), &name.file_position)?;
+
+        return Ok(refvalue);
+    }
+
+    fn parse_callable_args(&mut self, args: &Box<Expression>) -> Result<SahaFunctionArguments, RuntimeError> {
+        let mut call_args: SahaFunctionArguments = HashMap::new();
+
+        match &args.kind {
+            ExpressionKind::CallableArgs(vargs) => {
+                for varg in vargs {
+                    match &varg.kind {
+                        ExpressionKind::CallableArg(argname, argval) => {
+                            call_args.insert(argname.identifier.clone(), self.visit_expression(&argval)?);
+                        },
+                        _ => unreachable!()
+                    };
+                }
+            },
+            _ => unreachable!()
+        }
+
+        return Ok(call_args);
     }
 
     /// Call a global/bare function.
     fn call_function(&mut self, callable: &Identifier, args: &Box<Expression>) -> AstResult {
-        unimplemented!()
+        let func: Box<dyn SahaCallable>;
+
+        {
+            let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+            if st.functions.contains_key(&callable.identifier) == false {
+                let err = RuntimeError::new(
+                    &format!("Cannot call undefined function `{}`", callable.identifier),
+                    Some(callable.file_position.clone())
+                );
+
+                return Err(err.with_type("KeyError"));
+            }
+
+            let funcopt = st.functions.get(&callable.identifier).unwrap();
+
+            func = funcopt.clone();
+        }
+
+        let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
+
+        return func.call(call_args, Some(callable.file_position.clone()));
     }
 
     /// Call an object method.
-    fn call_method(&mut self, obj: &Value, callable: &Identifier, args: &Box<Expression>) -> AstResult {
-        unimplemented!()
+    fn call_method(&mut self, obj: &Value, access_kind: &AccessKind, callable: &Identifier, args: &Box<Expression>) -> AstResult {
+        match &obj.kind {
+            SahaType::Void => {
+                let err = RuntimeError::new("Cannot access property or call method on a void value", Some(callable.file_position.clone()));
+
+                return Err(err.with_type("TypeError"));
+            },
+            SahaType::Obj => {
+                let instref: InstRef = obj.obj.unwrap();
+                let instance: Box<dyn SahaObject>;
+
+                {
+                    let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+                    if st.instances.contains_key(&instref) == false {
+                        let err = RuntimeError::new(
+                            "Cannot call method on undefined instance",
+                            Some(callable.file_position.clone())
+                        );
+
+                        return Err(err.with_type("KeyError"));
+                    }
+
+                    let instopt = st.instances.get(&instref).unwrap();
+
+                    instance = instopt.clone();
+                }
+
+                let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
+
+                unimplemented!()
+
+                //inst.call_member()
+            },
+            _ => {
+                let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
+
+                obj.call_value_method(&callable.file_position, access_kind, &callable.identifier, &call_args)
+            }
+        }
     }
 }

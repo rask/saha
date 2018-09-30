@@ -349,7 +349,6 @@ impl<'a> Tokenizer<'a> {
                         "?" => Token::QuestionMark(fp),
                         "," => Token::Comma(fp),
                         ";" => Token::EndStatement(fp),
-                        ":" => Token::Colon(fp),
 
                         // single ops
                         "-" => Token::OpSub(fp),
@@ -358,17 +357,31 @@ impl<'a> Tokenizer<'a> {
                         "/" => Token::OpDiv(fp),
                         "!" => Token::UnOpNot(fp),
                         "<" => Token::OpLt(fp),
-                        ">" => {
-                            if &prev_symbol == "|" {
+
+                        // combinable symbols, we need to check back to see if we need to combine
+                        ":" => {
+                            if &prev_symbol == ":" {
                                 allow_prev_use = false;
                                 tokens.pop();
-                                Token::OpPipe(fp.shift_col(-1))
+                                Token::StaticAccess(fp.shift_col(-1))
                             } else {
-                                Token::OpGt(fp)
+                                Token::Colon(fp)
                             }
                         },
 
-                        // combinable symbols, we need to check back to see if we need to combine
+                        ">" => {
+                            if ["|", "-"].contains(&prev_symbol.as_str()) {
+                                allow_prev_use = false;
+                                tokens.pop();
+                            }
+
+                            match &prev_symbol as &str {
+                                "-" => Token::ObjectAccess(fp.shift_col(-1)),
+                                "|" => Token::OpPipe(fp.shift_col(-1)),
+                                _ => Token::OpGt(fp)
+                            }
+                        },
+
                         "=" => {
                             if ["=", "!", "<", ">"].contains(&prev_symbol.as_str()) {
                                 allow_prev_use = false;

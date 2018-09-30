@@ -88,7 +88,7 @@ impl<'a> Lexer<'a> {
         return self.lexemize();
     }
 
-    fn new_filepos(&self, line: usize, col: u32) -> FilePosition {
+    fn new_filepos(&self, line: usize, col: i32) -> FilePosition {
         return FilePosition {
             path: self.source_file.clone(),
             line: line,
@@ -249,7 +249,7 @@ impl<'a> Lexer<'a> {
                 "comment" | "string" => {
                     if char_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Word(
-                            self.new_filepos(current_line, char_buffer.len() as u32),
+                            self.new_filepos(current_line, char_buffer.len() as i32),
                             char_buffer.iter().collect()
                         ));
 
@@ -258,7 +258,7 @@ impl<'a> Lexer<'a> {
 
                     if number_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Number(
-                            self.new_filepos(current_line, current_column - number_buffer.len() as u32),
+                            self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
                         ));
 
@@ -268,7 +268,7 @@ impl<'a> Lexer<'a> {
                 "word" => {
                     if number_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Number(
-                            self.new_filepos(current_line, current_column - number_buffer.len() as u32),
+                            self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
                         ));
 
@@ -298,7 +298,7 @@ impl<'a> Lexer<'a> {
                     } else {
                         if number_buffer.is_empty() == false {
                             lexemes.push(Lexeme::Number(
-                                self.new_filepos(current_line, current_column - number_buffer.len() as u32),
+                                self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                                 number_buffer.iter().collect()
                             ));
 
@@ -312,7 +312,7 @@ impl<'a> Lexer<'a> {
                                 // Word buffer contains something and we encountered non-joiner, flush
                                 // the word buffer.
                                 lexemes.push(Lexeme::Word(
-                                    self.new_filepos(current_line, current_column - char_buffer.len() as u32),
+                                    self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                                     char_buffer.iter().collect()
                                 ));
                             }
@@ -335,7 +335,7 @@ impl<'a> Lexer<'a> {
                 "whitespace" => {
                     if char_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Word(
-                            self.new_filepos(current_line, current_column - char_buffer.len() as u32),
+                            self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                             char_buffer.iter().collect()
                         ));
 
@@ -344,7 +344,7 @@ impl<'a> Lexer<'a> {
 
                     if number_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Number(
-                            self.new_filepos(current_line, current_column - number_buffer.len() as u32),
+                            self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
                         ));
 
@@ -359,7 +359,7 @@ impl<'a> Lexer<'a> {
                 "newline" => {
                     if char_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Word(
-                            self.new_filepos(current_line, current_column - char_buffer.len() as u32),
+                            self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                             char_buffer.iter().collect()
                         ));
 
@@ -368,7 +368,7 @@ impl<'a> Lexer<'a> {
 
                     if number_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Number(
-                            self.new_filepos(current_line, current_column - number_buffer.len() as u32),
+                            self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
                         ));
 
@@ -384,7 +384,7 @@ impl<'a> Lexer<'a> {
                 _ => {
                     if char_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Word(
-                            self.new_filepos(current_line, current_column - char_buffer.len() as u32),
+                            self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                             char_buffer.iter().collect()
                         ));
 
@@ -393,7 +393,7 @@ impl<'a> Lexer<'a> {
 
                     if number_buffer.is_empty() == false {
                         lexemes.push(Lexeme::Number(
-                            self.new_filepos(current_line, current_column - number_buffer.len() as u32),
+                            self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
                         ));
 
@@ -412,7 +412,7 @@ impl<'a> Lexer<'a> {
         // In case we have a char buffer that is not empty by the end.
         if char_buffer.is_empty() == false {
             lexemes.push(Lexeme::Word(
-                self.new_filepos(current_line, current_column - char_buffer.len() as u32),
+                self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                 char_buffer.iter().collect()
             ));
 
@@ -421,7 +421,7 @@ impl<'a> Lexer<'a> {
 
         if number_buffer.is_empty() == false {
             lexemes.push(Lexeme::Number(
-                self.new_filepos(current_line, current_column - number_buffer.len() as u32),
+                self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                 number_buffer.iter().collect()
             ));
 

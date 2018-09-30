@@ -4,10 +4,12 @@
 
 pub mod objects;
 pub mod functions;
+mod value_methods;
 
 use noisy_float::prelude::*;
 
 use std::{
+    collections::HashMap,
     fmt::{
         Debug,
         Formatter as FmtFormatter,
@@ -15,7 +17,26 @@ use std::{
     }
 };
 
-use crate::symbol_table::InstRef;
+use crate::{
+    ast::AccessKind,
+    symbol_table::InstRef,
+    errors::{Error, RuntimeError},
+    source::files::FilePosition,
+    types::{
+        functions::{
+            ValidatesArgs,
+            SahaCallResult,
+            SahaFunctionParamDefs,
+            SahaFunctionArguments
+        },
+        value_methods::ValueMethodFn
+    }
+};
+
+lazy_static! {
+    pub static ref str_methods: HashMap<String, (SahaFunctionParamDefs, ValueMethodFn)> = value_methods::get_str_methods();
+    pub static ref int_methods: HashMap<String, (SahaFunctionParamDefs, ValueMethodFn)> = value_methods::get_int_methods();
+}
 
 /// Saha types.
 #[derive(Clone, Debug, PartialEq)]
@@ -192,6 +213,29 @@ impl Value {
     /// Create a new void value.
     pub fn void() -> Value {
         return Value::new();
+    }
+
+    pub fn call_value_method(&self, call_pos: &FilePosition, _: &AccessKind, method_name: &String, args: &SahaFunctionArguments) -> SahaCallResult {
+        let valuemethods = match self.kind {
+            SahaType::Int => int_methods.clone(),
+            SahaType::Str => str_methods.clone(),
+            _ => unimplemented!()
+        };
+
+        if valuemethods.contains_key(method_name) == false {
+            let err = RuntimeError::new(
+                &format!("No method `{}` defined for type `{:?}`", method_name, self.kind),
+                Some(call_pos.clone())
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        let (mparams, mfn) = valuemethods.get(method_name).unwrap();
+
+        mparams.validate_args(args)?;
+
+        return mfn(self.clone(), args.clone());
     }
 }
 
