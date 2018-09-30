@@ -179,8 +179,8 @@ impl<'a> Lexer<'a> {
             if string_is_open == true {
                 comment_can_start = false;
                 comment_maybe_starts = false;
-                let mut last_string_char: char;
-                let mut buf = string_buffer.clone();
+                let last_string_char: char;
+                let buf = string_buffer.clone();
 
                 last_string_char = *buf.last().unwrap_or(&'-');
 
@@ -200,6 +200,7 @@ impl<'a> Lexer<'a> {
 
                 if current_character == '"' && last_string_char != '\\' {
                     string_is_open = false;
+                    comment_can_start = true;
                     let cur_buffer_pos = string_begin_pos.clone().unwrap();
 
                     lexemes.push(Lexeme::String(
@@ -217,6 +218,7 @@ impl<'a> Lexer<'a> {
             if current_character == '"' {
                 // string delimiter
                 string_is_open = true;
+                comment_can_start = false;
 
                 string_begin_pos = Some(self.new_filepos(current_line, current_column));
 
@@ -274,8 +276,6 @@ impl<'a> Lexer<'a> {
                     }
 
                     char_buffer.push(current_character);
-
-                    comment_can_start = false;
                 },
                 "number" => {
                     if char_buffer.is_empty() == false {
@@ -308,9 +308,7 @@ impl<'a> Lexer<'a> {
                         if word_joiners.contains(&current_character) {
                             char_buffer.push(current_character);
                         } else {
-                            if char_buffer.is_empty() {
-                                comment_can_start = false;
-                            } else {
+                            if char_buffer.is_empty() == false {
                                 // Word buffer contains something and we encountered non-joiner, flush
                                 // the word buffer.
                                 lexemes.push(Lexeme::Word(
@@ -329,8 +327,8 @@ impl<'a> Lexer<'a> {
                             ));
                         }
 
-                        if current_character != '/' && comment_can_start == true {
-                            comment_can_start = false;
+                        if current_character == '/' && comment_can_start {
+                            comment_maybe_starts = true;
                         }
                     }
                 },
@@ -646,6 +644,109 @@ function main() int
 
         match lexemes.pop().unwrap() {
             Lexeme::Eof(f) => assert!(f.line == 8),
+            _ => unreachable!()
+        };
+    }
+
+    #[test]
+    fn test_comments_are_lexemized_properly() {
+        let test_file = PathBuf::from("/saha/test/file.saha");
+        let test_source = "/// This is a comment
+function main() int
+{
+    return 0; // hello world
+}".to_string();
+
+        let mut lexer = Lexer::new(&test_file, test_source);
+
+        let lexemes_result = lexer.get_lexemes();
+
+        assert!(lexemes_result.is_ok());
+
+        let mut lexemes = lexemes_result.ok().unwrap();
+
+        match lexemes.remove(0) {
+            Lexeme::Comment(f, source) => {
+                assert!(f.path == test_file);
+                assert!(source == "/// This is a comment".to_string());
+            },
+            _ => unreachable!()
+        };
+
+        match lexemes.remove(0) {
+            Lexeme::Newline(_) => assert!(true),
+            _ => unreachable!()
+        };
+
+        match lexemes.remove(0) {
+            Lexeme::Word(f, source) => assert!(source == "function".to_string()),
+            _ => unreachable!()
+        };
+
+        match lexemes.remove(0) {
+            Lexeme::Whitespace(f, space) => {
+                assert!(f.line == 2);
+                assert!(f.column == 9);
+                assert!(space == " ".to_string());
+            },
+            _ => unreachable!()
+        };
+
+        match lexemes.remove(0) {
+            Lexeme::Word(_, _) => assert!(true),
+            _ => unreachable!()
+        };
+
+        match lexemes.remove(0) {
+            Lexeme::Symbol(f, symb) => {
+                assert!(f.column == 14);
+                assert!(symb == "(".to_string());
+            },
+            _ => unreachable!()
+        }
+
+        match lexemes.remove(0) {
+            Lexeme::Symbol(_, symb) => assert!(symb == ")".to_string()),
+            _ => unreachable!()
+        }
+
+        match lexemes.remove(0) {
+            Lexeme::Whitespace(_, _) => assert!(true),
+            _ => unreachable!()
+        };
+
+        match lexemes.remove(0) {
+            Lexeme::Word(_, w) => assert!(w == "int".to_string()),
+            _ => unreachable!()
+        };
+
+        lexemes.remove(0); // \n
+        lexemes.remove(0); // {
+        lexemes.remove(0); // \n
+        lexemes.remove(0); // whitespace
+        lexemes.remove(0); // whitespace
+        lexemes.remove(0); // whitespace
+        lexemes.remove(0); // whitespace
+        lexemes.remove(0); // return
+        lexemes.remove(0); // whitespace
+        lexemes.remove(0); // 1
+        lexemes.remove(0); // ;
+        lexemes.remove(0); // whitespace
+
+        match lexemes.remove(0) {
+            Lexeme::Comment(_, source) => {
+                assert!(source == "// hello world".to_string());
+            },
+            _ => unreachable!()
+        };
+
+        match lexemes.remove(0) {
+            Lexeme::Newline(..) => assert!(true),
+            _ => unreachable!()
+        };
+
+        match lexemes.remove(0) {
+            Lexeme::Symbol(_, symb) => assert!(symb == "}".to_string()),
             _ => unreachable!()
         };
     }

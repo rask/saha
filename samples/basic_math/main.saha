@@ -1,3 +1,4 @@
+/// App main
 function main() int
 {
     return 1 + 2 * 3 - 2; // should be 5

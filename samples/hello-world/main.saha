@@ -8,7 +8,7 @@ function main() int
     var hello_world_value'str = "Hello world!";
 
     // Print a value to stdout
-    print(value = hello_world_value);
+    print(text = hello_world_value);
 
     // Return integer
     return 0;

@@ -5,3 +5,5 @@ authors = ["Otto Rask"]
 edition = "2018"
 
 [dependencies]
+saha_lib = { path = "../lib" }
+noisy_float = "0.1.*"

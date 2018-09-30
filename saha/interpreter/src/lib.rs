@@ -32,6 +32,8 @@ use saha_lib::{
 
 use saha_tokenizer::tokenize;
 use saha_parser::parse_tokens;
+use saha_core::register_core;
+
 use self::errors::{StartupError, StartupResult};
 
 /// Validate if the given interpreter entrypoint file is a valid file for usage.
@@ -73,13 +75,15 @@ fn parse_saha_source(args: &cli::InterpreterArgs) -> Result<(), ParseError> {
     let tokenized_source = tokenize(&entrypoint)?;
 
     // Parse tokens into declarations and definitions into the global symbol table.
-    parse_tokens(&tokenized_source);
+    parse_tokens(&tokenized_source)?;
 
     return Ok(());
 }
 
 /// Load Saha core, meaning stdlib, extensions, and such.
 fn load_saha_core() -> Result<(), StartupError> {
+    register_core();
+
     return Ok(());
 }
 

@@ -521,6 +521,33 @@ mod tests {
     }
 
     #[test]
+    fn test_comments_are_tokenized_properly() {
+        let testpath: PathBuf = get_test_main_file();
+
+        let lexemes = vec![
+            Lexeme::Word(testfilepos(), "return".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Number(testfilepos(), "1".to_string()),
+            Lexeme::Symbol(testfilepos(), ";".to_string()),
+            Lexeme::Whitespace(testfilepos(), " ".to_string()),
+            Lexeme::Comment(testfilepos(), "// hello".to_string())
+        ];
+
+        let expected = vec![
+            Token::KwReturn(testfilepos()),
+            Token::IntegerValue(testfilepos(), 1 as isize),
+            Token::EndStatement(testfilepos()),
+        ];
+
+        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::new());
+
+        let tokens = tokenizer.tokenize();
+        let printtok = tokenizer.tokenize();
+
+        assert_eq!(tokens.unwrap(), expected);
+    }
+
+    #[test]
     fn test_tokenizer_tokenizes_basic_sources() {
         let testpath: PathBuf = get_test_main_file();
 

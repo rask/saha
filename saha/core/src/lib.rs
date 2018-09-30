@@ -1,7 +1,6 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
+mod utils;
+pub mod stdlib;
+
+pub fn register_core() {
+    stdlib::register_stdlib();
 }

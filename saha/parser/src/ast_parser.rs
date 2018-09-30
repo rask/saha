@@ -334,7 +334,15 @@ impl<'a> AstParser<'a> {
             | Token::FloatValue(..)
             | Token::BooleanValue(..) => self.parse_literal_value()?,
             Token::KwNew(..) => unimplemented!(),
-            Token::Name(..) => self.parse_ident_path()?,
+            Token::Name(..) => {
+                let identpath_expr = self.parse_ident_path()?;
+
+                // see if we're working with a function call
+                match self.ntok.unwrap() {
+                    Token::ParensOpen(..) => self.parse_function_call(identpath_expr)?,
+                    _ => identpath_expr
+                }
+            },
             _ => unreachable!()
         };
 
@@ -380,7 +388,7 @@ impl<'a> AstParser<'a> {
         }
 
         // FIXME should the next predence be `minimum_op_precedence` or `next_min_precedence` here?
-        return self.parse_binop_expression(binop_expr, minimum_op_precedence);
+        return self.parse_binop_expression(binop_expr, next_min_precedence);
     }
 
     /// Parse a literal value token.
@@ -454,6 +462,76 @@ impl<'a> AstParser<'a> {
         };
 
         return Ok(Box::new(path_expr));
+    }
+
+    /// Parse a function call expression which is tied to a identifier path.
+    fn parse_function_call(&mut self, ident_expr: Box<Expression>) -> PR<Box<Expression>> {
+        self.consume_next(vec!["("])?;
+
+        let call_pos = self.ctok.unwrap().get_file_position();
+
+        let call_args: Box<Expression> = self.parse_callable_args()?;
+
+        self.consume_next(vec![")"])?;
+
+        let fn_call_expr = Expression {
+            file_position: call_pos,
+            kind: ExpressionKind::FunctionCall(ident_expr, call_args)
+        };
+
+        return Ok(Box::new(fn_call_expr));
+    }
+
+    /// Parse function call arguments that are wrapped in parentheses. Also used
+    /// for new instance args.
+    fn parse_callable_args(&mut self) -> PR<Box<Expression>> {
+        let mut args: Vec<Box<Expression>> = Vec::new();
+        let args_pos = self.ctok.unwrap().get_file_position();
+
+        loop {
+            match self.ntok.unwrap() {
+                Token::ParensClose(..) => break,
+                Token::Comma(..) => {
+                    self.consume_next(vec![","])?;
+                }
+                _ => {
+                    args.push(self.parse_callable_arg()?);
+                }
+            }
+        }
+
+        let args_expr = Expression {
+            file_position: args_pos,
+            kind: ExpressionKind::CallableArgs(args)
+        };
+
+        return Ok(Box::new(args_expr));
+    }
+
+    /// Parse a single function call argument.
+    fn parse_callable_arg(&mut self) -> PR<Box<Expression>> {
+        self.consume_next(vec!["name"])?;
+
+        let argname: String = String::new();
+        let argpos: FilePosition = FilePosition::unknown();
+
+        let (argname, argpos) = match self.ctok.unwrap() {
+            Token::Name(pos, _, name) => (name, pos),
+            _ => unreachable!()
+        };
+
+        self.consume_next(vec!["="])?;
+
+        let arg_value_expr = self.parse_expression(0)?;
+
+        return Ok(Box::new(Expression {
+            file_position: argpos.clone(),
+            kind: ExpressionKind::CallableArg(Identifier {
+                file_position: argpos.clone(),
+                identifier: argname.clone()
+            },
+            arg_value_expr)
+        }));
     }
 }
 
