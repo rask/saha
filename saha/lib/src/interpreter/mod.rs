@@ -177,10 +177,7 @@ impl<'a> AstVisitor<'a> {
     fn visit_expression(&mut self, expression: &Box<Expression>) -> AstResult {
         match &expression.kind {
             ExpressionKind::LiteralValue(val) => Ok(val.clone()),
-            ExpressionKind::BinaryOperation(lhs, op, rhs) => {
-                println!("{:?}", expression.kind);
-                self.visit_binop_expression(lhs, op, rhs)
-            },
+            ExpressionKind::BinaryOperation(lhs, op, rhs) => self.visit_binop_expression(lhs, op, rhs),
             ExpressionKind::FunctionCall(identpath, call_args) => self.visit_callable_call(identpath, call_args),
             ExpressionKind::IdentPath(root, members) => self.visit_ident_path(root, members),
             _ => unimplemented!("{:?}", expression.kind)
@@ -301,7 +298,7 @@ impl<'a> AstVisitor<'a> {
                     return Err(err.with_type("MathError"));
                 }
 
-                Value::float(lhs_value.float.unwrap() + rhs_value.float.unwrap())
+                Value::float(lhs_value.float.unwrap() / rhs_value.float.unwrap())
             },
             (SahaType::Int, SahaType::Int) => {
                 if rhs_value.int.unwrap() == 0 {
@@ -310,7 +307,7 @@ impl<'a> AstVisitor<'a> {
                     return Err(err.with_type("MathError"));
                 }
 
-                Value::int(lhs_value.int.unwrap() + rhs_value.int.unwrap())
+                Value::int(lhs_value.int.unwrap() / rhs_value.int.unwrap())
             },
             _ => {
                 let err = RuntimeError::new(

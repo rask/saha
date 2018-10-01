@@ -132,6 +132,9 @@ impl<'a> Lexer<'a> {
                     comment_can_start = false;
 
                     continue;
+                } else {
+                    // this here prevents characters between `/`  and `/` from being ignored
+                    comment_maybe_starts = false;
                 }
             }
 

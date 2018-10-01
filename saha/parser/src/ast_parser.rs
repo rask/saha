@@ -356,9 +356,6 @@ impl<'a> AstParser<'a> {
 
         let op_token = self.ctok.unwrap();
 
-        holy heck this thing is broken, just clumps everything to right side which
-        breaks everything! FIXME
-
         let binop = BinOp::from_token(op_token);
 
         if binop.is_err() {
@@ -370,28 +367,35 @@ impl<'a> AstParser<'a> {
 
         let binop = binop.ok().unwrap();
 
-        let next_min_precedence = match binop.is_left_assoc {
-            true => minimum_op_precedence + 1,
-            false => minimum_op_precedence
-        };
+        let mut rhs_expression = self.parse_primary()?;
 
-        let rhs_expression = self.parse_expression(minimum_op_precedence)?;
+        let mut ntok: &Token = self.ntok.unwrap_or(&Token::Eob);
+        let mut next_precedence = ntok.get_precedence();
+
+        while
+            (next_precedence > op_token.get_precedence() && binop.is_left_assoc == true) ||
+            (next_precedence == op_token.get_precedence() && binop.is_left_assoc == false)
+        {
+            // while we are on route in binops we dig down on the right side to
+            // make precedence work
+            rhs_expression = self.parse_binop_expression(rhs_expression, next_precedence)?;
+
+            ntok = self.ntok.unwrap_or(&Token::Eob);
+            next_precedence = ntok.get_precedence();
+        }
 
         let binop_expr = Box::new(Expression {
             file_position: lhs_expr.file_position.to_owned(),
             kind: ExpressionKind::BinaryOperation(lhs_expr, binop, rhs_expression)
         });
 
-        let ntok: &Token = self.ntok.unwrap_or(&Token::Eob);
-        let next_precedence = ntok.get_precedence();
-
-        if next_precedence < minimum_op_precedence {
-            // non-operator or lesser precedence
+        if next_precedence < 0 {
+            // non-operator
             return Ok(binop_expr);
         }
 
         // FIXME should the next predence be `minimum_op_precedence` or `next_min_precedence` here?
-        return self.parse_binop_expression(binop_expr, next_min_precedence);
+        return self.parse_binop_expression(binop_expr, 0);
     }
 
     /// Parse a literal value token.

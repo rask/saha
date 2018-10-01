@@ -1,26 +1,12 @@
 /// App main
 function main() int
 {
-    var first'int = 1 + 2 * 3 - 2;
+    var first'int = (1 + 2 * 2 + 1 + 2 / 2 + 1) / 2;
     var fstr'str = first->to_string();
 
-    var second'int = (2 * 4 - 3 + 5) / 2;
-    var sstr'str = second->to_string();
+    var to_print'str = "should be 4: (1 + 2 * 2 + 1 + 2 / 2 + 1) / 2 = " + fstr;
 
-    var third'int = 1 + 2 + 3;
-    var tstr'str = third->to_string();
-
-    var fourth'int = 1 + 2 - 3;
-    var fostr'str = fourth->to_string();
-
-    var fifth'int = 2 * 4 - 1;
-    var fistr'str = fifth->to_string();
-
-    print_line(text = "1+2*3-2     = 5 = " + fstr);
-    print_line(text = "(2*4-3+5)/2 = 5 = " + sstr);
-    print_line(text = "1+2+3       = 6 = " + tstr);
-    print_line(text = "1+2-3       = 0 = " + fostr);
-    print_line(text = "2*4-1       = 7 = " + fistr);
+    print_line(text = to_print);
 
     return 0;
 }

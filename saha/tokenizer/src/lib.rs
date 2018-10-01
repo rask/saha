@@ -130,7 +130,7 @@ mod tests {
         let usefile = get_test_sample_file("src/flatten_from.saha");
         let usefile2 = get_test_sample_file("src/flatten_once_more.saha");
 
-        fn fpos(path: &PathBuf, line: usize, col: u32) -> FilePosition {
+        fn fpos(path: &PathBuf, line: usize, col: i32) -> FilePosition {
             return FilePosition {
                 path: path.to_owned(),
                 line: line,
