@@ -1,0 +1,14 @@
+class MyClass
+{
+    pub method foo() int
+    {
+        return 1;
+    }
+}
+
+function main() int
+{
+    var mc'MyClass = new MyClass();
+
+    return mc->foo();
+}

@@ -233,7 +233,7 @@ impl Value {
 
         let (mparams, mfn) = valuemethods.get(method_name).unwrap();
 
-        mparams.validate_args(args)?;
+        mparams.validate_args(args, &Some(call_pos.clone()))?;
 
         return mfn(self.clone(), args.clone());
     }

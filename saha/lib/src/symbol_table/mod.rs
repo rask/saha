@@ -9,10 +9,11 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
-    errors::{Error, ParseError},
+    errors::{Error, ParseError, RuntimeError},
+    source::files::FilePosition,
     types::{
         Value,
-        functions::SahaCallable,
+        functions::{SahaCallable, SahaFunctionArguments},
         objects::{SahaObject, ClassDefinition, BehaviorDefinition}
     }
 };
@@ -53,6 +54,28 @@ impl SymbolTable {
 
         // FIXME prevent overrides
         self.functions.insert(fn_name, func);
+    }
+
+    /// Insert a new object instance to the symbol table, and then return the
+    /// instref value.
+    pub fn create_object_instance(&mut self, class_name: String, args: SahaFunctionArguments, create_pos: &Option<FilePosition>) -> Result<Value, RuntimeError> {
+        let def: Option<&ClassDefinition> = self.classes.get(&class_name);
+
+        if def.is_none() {
+            let err = RuntimeError::new(&format!("Cannot create instance of unknown class `{}`", class_name), create_pos.to_owned());
+
+            return Err(err.with_type("TypeError"));
+        }
+
+        let def = def.unwrap();
+
+        let instref = Self::get_new_uuid_bytes();
+
+        let inst: Box<dyn SahaObject> = def.create_new_instance(instref, args, create_pos)?;
+
+        self.instances.insert(instref, inst);
+
+        return Ok(Value::obj(instref));
     }
 
     /// Get a new random UUID types type instance reference.

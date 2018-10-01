@@ -24,8 +24,9 @@ use std::collections::HashMap;
 use saha_lib::{
     SAHA_SYMBOL_TABLE,
     types::{
-        Value,
-        functions::{SahaCallable, UserFunction}
+        Value, SahaType,
+        functions::{SahaCallable, UserFunction},
+        objects::{ClassDefinition, Property, ObjProperties}
     },
     errors::ParseError,
     source::token::Token,
@@ -78,6 +79,27 @@ fn populate_behaviors(parse_table: &ParseTable) -> Result<(), ParseError> {
 }
 
 fn populate_classes(parse_table: &ParseTable) -> Result<(), ParseError> {
+    let classes = parse_table.classes.clone();
+
+    let mut st = SAHA_SYMBOL_TABLE.lock().unwrap();
+
+    for (cname, c) in classes {
+        let mut methods: HashMap<String, Box<dyn SahaCallable>> = HashMap::new();
+        let mut props: ObjProperties = HashMap::new();
+
+        unimplemented!();
+
+        let cdef = ClassDefinition {
+            name: c.source_name.clone(),
+            fqname: c.name.clone(),
+            methods: methods,
+            properties: props,
+            implements: c.implements.clone()
+        };
+
+        st.classes.insert(cname, cdef);
+    }
+
     return Ok(());
 }
 

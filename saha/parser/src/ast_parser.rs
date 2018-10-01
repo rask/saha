@@ -333,7 +333,7 @@ impl<'a> AstParser<'a> {
             | Token::IntegerValue(..)
             | Token::FloatValue(..)
             | Token::BooleanValue(..) => self.parse_literal_value()?,
-            Token::KwNew(..) => unimplemented!(),
+            Token::KwNew(..) => self.parse_new_instance_expression()?,
             Token::Name(..) => {
                 let identpath_expr = self.parse_ident_path()?;
 
@@ -575,6 +575,35 @@ impl<'a> AstParser<'a> {
                 identifier: argname.clone()
             },
             arg_value_expr)
+        }));
+    }
+
+    /// Parse a newup.
+    fn parse_new_instance_expression(&mut self) -> PR<Box<Expression>> {
+        let newup_pos = self.ctok.unwrap().get_file_position();
+
+        self.consume_next(vec!["name"])?;
+
+        let (cname_pos, cname) = match self.ctok.unwrap() {
+            Token::Name(pos, alias, _) => (pos, alias),
+            _ => unreachable!()
+        };
+
+        self.consume_next(vec!["("])?;
+
+        let newup_args = self.parse_callable_args()?;
+
+        self.consume_next(vec![")"])?;
+
+        return Ok(Box::new(Expression {
+            file_position: newup_pos,
+            kind: ExpressionKind::NewInstance(
+                Identifier {
+                    file_position: cname_pos.clone(),
+                    identifier: cname.clone()
+                },
+                newup_args
+            )
         }));
     }
 }

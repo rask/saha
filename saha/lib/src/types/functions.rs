@@ -31,10 +31,10 @@ pub struct FunctionParameter {
 /// Anything that needs to validate call arguments.
 pub trait ValidatesArgs {
     /// Validate a collection of function/method call arguments.
-    fn validate_args(&self, args: &SahaFunctionArguments) -> Result<(), RuntimeError>;
+    fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError>;
 
     /// Validate args in case there is only a single parameter defined.
-    fn validate_single_param_args(&self, args: &SahaFunctionArguments) -> Result<(), RuntimeError>;
+    fn validate_single_param_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError>;
 }
 
 /// Anything which can be called in Saha. Functions and methods mainly.
@@ -118,7 +118,7 @@ pub struct UserFunction {
 
 impl SahaCallable for CoreFunction {
     fn call(&self, args: SahaFunctionArguments, call_source_position: Option<FilePosition>) -> SahaCallResult {
-        self.params.validate_args(&args)?;
+        self.params.validate_args(&args, &call_source_position)?;
 
         return (self.fn_ref)(args);
     }
@@ -158,7 +158,7 @@ impl SahaCallable for CoreFunction {
 
 impl SahaCallable for UserFunction {
     fn call(&self, args: SahaFunctionArguments, call_source_position: Option<FilePosition>) -> SahaCallResult {
-        self.params.validate_args(&args)?;
+        self.params.validate_args(&args, &call_source_position)?;
 
         // clone the args to miminize possibility of side effects
         let mut ast_visitor = AstVisitor::new(&self.ast, args.clone(), None);
@@ -202,7 +202,7 @@ impl SahaCallable for UserFunction {
 impl ValidatesArgs for SahaFunctionParamDefs {
     /// Validate args in a situation where there is only a single parameter defined, which means
     /// we can call the function with no parameter name defined (to make code a little leaner).
-    fn validate_single_param_args(&self, args: &SahaFunctionArguments) -> Result<(), RuntimeError> {
+    fn validate_single_param_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
         let param_name = self.keys().nth(0).unwrap();
         let param = self.values().nth(0).unwrap();
         let param_default = &param.default;
@@ -245,13 +245,13 @@ impl ValidatesArgs for SahaFunctionParamDefs {
         return Ok(());
     }
 
-    fn validate_args(&self, args: &SahaFunctionArguments) -> Result<(), RuntimeError> {
+    fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
         let mut allow_call_without_arg_name = false;
 
         if self.keys().len() == 1 {
             // if a function accepts only a single argument, we allow calling without setting a
             // parameter name (will use `""` internally)
-            return self.validate_single_param_args(&args);
+            return self.validate_single_param_args(&args, call_pos);
         }
 
         for (name, ref param) in self {
