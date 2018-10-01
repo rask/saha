@@ -328,7 +328,7 @@ impl<'a> AstParser<'a> {
             Token::BraceOpen(..) => unimplemented!(),
             Token::CurlyOpen(..) => unimplemented!(),
             Token::UnOpNot(..)
-            | Token::OpSub(..) => unimplemented!(),
+            | Token::OpSub(..) => self.parse_unop_expression()?,
             Token::StringValue(..)
             | Token::IntegerValue(..)
             | Token::FloatValue(..)
@@ -337,9 +337,10 @@ impl<'a> AstParser<'a> {
             Token::Name(..) => {
                 let identpath_expr = self.parse_ident_path()?;
 
-                // see if we're working with a function call
+                // see if we're working with a function call or assigment
                 match self.ntok.unwrap() {
                     Token::ParensOpen(..) => self.parse_function_call(identpath_expr)?,
+                    Token::Assign(..) => self.parse_assignment_expression(identpath_expr)?,
                     _ => identpath_expr
                 }
             },
@@ -347,6 +348,18 @@ impl<'a> AstParser<'a> {
         };
 
         return Ok(primary);
+    }
+
+    /// Parse an assignment expression.
+    fn parse_assignment_expression(&mut self, identpath: Box<Expression>) -> PR<Box<Expression>> {
+        self.consume_next(vec!["="])?;
+
+        let value_expr = self.parse_expression(0)?;
+
+        return Ok(Box::new(Expression {
+            file_position: identpath.file_position.clone(),
+            kind: ExpressionKind::Assignment(identpath, value_expr)
+        }));
     }
 
     /// Parse a binary operation. First we parse the op and then the RHS
@@ -396,6 +409,25 @@ impl<'a> AstParser<'a> {
 
         // FIXME should the next predence be `minimum_op_precedence` or `next_min_precedence` here?
         return self.parse_binop_expression(binop_expr, 0);
+    }
+
+    /// Parse an unary operation.
+    fn parse_unop_expression(&mut self) -> PR<Box<Expression>> {
+        let (unoppos, unopkind) = match self.ctok.unwrap() {
+            Token::UnOpNot(f) => (f, UnaryOpKind::Not),
+            Token::OpSub(f) => (f, UnaryOpKind::Minus),
+            _ => unreachable!()
+        };
+
+        let unop = UnaryOp {
+            file_position: unoppos.clone(),
+            kind: unopkind
+        };
+
+        return Ok(Box::new(Expression {
+            file_position: unoppos.clone(),
+            kind: ExpressionKind::UnaryOperation(unop, self.parse_primary()?)
+        }));
     }
 
     /// Parse a literal value token.
@@ -665,15 +697,6 @@ mod tests {
             kind: ExpressionKind::BinaryOperation(
                 Box::new(Expression {
                     file_position: testfilepos(),
-                    kind: ExpressionKind::LiteralValue(Value::int(1))
-                }),
-                BinOp {
-                    kind: BinOpKind::Add,
-                    is_left_assoc: true,
-                    file_position: testfilepos()
-                },
-                Box::new(Expression {
-                    file_position: testfilepos(),
                     kind: ExpressionKind::BinaryOperation(
                         Box::new(Expression {
                             file_position: testfilepos(),
@@ -686,35 +709,44 @@ mod tests {
                         },
                         Box::new(Expression {
                             file_position: testfilepos(),
+                            kind: ExpressionKind::LiteralValue(Value::int(1))
+                        }),
+                    )
+                }),
+                BinOp {
+                    kind: BinOpKind::Add,
+                    is_left_assoc: true,
+                    file_position: testfilepos()
+                },
+                Box::new(Expression {
+                    file_position: testfilepos(),
+                    kind: ExpressionKind::BinaryOperation(
+                        Box::new(Expression {
+                            file_position: testfilepos(),
                             kind: ExpressionKind::BinaryOperation(
                                 Box::new(Expression {
                                     file_position: testfilepos(),
-                                    kind: ExpressionKind::BinaryOperation(
-                                        Box::new(Expression {
-                                            file_position: testfilepos(),
-                                            kind: ExpressionKind::LiteralValue(Value::int(2))
-                                        }),
-                                        BinOp {
-                                            kind: BinOpKind::Mul,
-                                            is_left_assoc: true,
-                                            file_position: testfilepos()
-                                        },
-                                        Box::new(Expression {
-                                            file_position: testfilepos(),
-                                            kind: ExpressionKind::LiteralValue(Value::int(3))
-                                        })
-                                    )
+                                    kind: ExpressionKind::LiteralValue(Value::int(2))
                                 }),
                                 BinOp {
-                                    file_position: testfilepos(),
+                                    kind: BinOpKind::Mul,
                                     is_left_assoc: true,
-                                    kind: BinOpKind::Sub
+                                    file_position: testfilepos()
                                 },
                                 Box::new(Expression {
                                     file_position: testfilepos(),
-                                    kind: ExpressionKind::LiteralValue(Value::int(1))
+                                    kind: ExpressionKind::LiteralValue(Value::int(3))
                                 })
                             )
+                        }),
+                        BinOp {
+                            file_position: testfilepos(),
+                            is_left_assoc: true,
+                            kind: BinOpKind::Sub
+                        },
+                        Box::new(Expression {
+                            file_position: testfilepos(),
+                            kind: ExpressionKind::LiteralValue(Value::int(1))
                         })
                     )
                 })
@@ -730,25 +762,17 @@ mod tests {
     }
 
     #[test]
-    fn test_left_assoc_ops_work_as_they_should() {
+    fn test_unary_ops_are_parsed_properly() {
         let tokens = vec![
             Token::ParensOpen(testfilepos()),
-            Token::IntegerValue(testfilepos(), 1),
-            Token::OpAdd(testfilepos()),
-            Token::IntegerValue(testfilepos(), 1),
+            Token::OpSub(testfilepos()),
+            Token::IntegerValue(testfilepos(), 5),
             Token::OpAdd(testfilepos()),
             Token::IntegerValue(testfilepos(), 2),
-            Token::OpSub(testfilepos()),
-            Token::IntegerValue(testfilepos(), 3),
-            Token::OpAdd(testfilepos()),
-            Token::IntegerValue(testfilepos(), 1),
             Token::ParensClose(testfilepos()),
             Token::EndStatement(testfilepos()),
             Token::Eob
         ];
-
-        // above is
-        // (1 + 1 + 2 * 3 - 1);
 
         let mut parser = AstParser::new(&tokens);
 
@@ -766,64 +790,27 @@ mod tests {
 
         let stmt = statements.pop().unwrap();
 
-        // this will get messy
         let expected_expr = Box::new(Expression {
             file_position: testfilepos(),
             kind: ExpressionKind::BinaryOperation(
                 Box::new(Expression {
                     file_position: testfilepos(),
-                    kind: ExpressionKind::LiteralValue(Value::int(1))
+                    kind: ExpressionKind::UnaryOperation(UnaryOp {
+                        file_position: testfilepos(),
+                        kind: UnaryOpKind::Minus
+                    }, Box::new(Expression {
+                        file_position: testfilepos(),
+                        kind: ExpressionKind::LiteralValue(Value::int(5))
+                    }))
                 }),
                 BinOp {
+                    file_position: testfilepos(),
                     kind: BinOpKind::Add,
-                    is_left_assoc: true,
-                    file_position: testfilepos()
+                    is_left_assoc: true
                 },
                 Box::new(Expression {
                     file_position: testfilepos(),
-                    kind: ExpressionKind::BinaryOperation(
-                        Box::new(Expression {
-                            file_position: testfilepos(),
-                            kind: ExpressionKind::LiteralValue(Value::int(1))
-                        }),
-                        BinOp {
-                            kind: BinOpKind::Add,
-                            is_left_assoc: true,
-                            file_position: testfilepos()
-                        },
-                        Box::new(Expression {
-                            file_position: testfilepos(),
-                            kind: ExpressionKind::BinaryOperation(
-                                Box::new(Expression {
-                                    file_position: testfilepos(),
-                                    kind: ExpressionKind::BinaryOperation(
-                                        Box::new(Expression {
-                                            file_position: testfilepos(),
-                                            kind: ExpressionKind::LiteralValue(Value::int(2))
-                                        }),
-                                        BinOp {
-                                            kind: BinOpKind::Sub,
-                                            is_left_assoc: true,
-                                            file_position: testfilepos()
-                                        },
-                                        Box::new(Expression {
-                                            file_position: testfilepos(),
-                                            kind: ExpressionKind::LiteralValue(Value::int(3))
-                                        }),
-                                    )
-                                }),
-                                BinOp {
-                                    file_position: testfilepos(),
-                                    is_left_assoc: true,
-                                    kind: BinOpKind::Add
-                                },
-                                Box::new(Expression {
-                                    file_position: testfilepos(),
-                                    kind: ExpressionKind::LiteralValue(Value::int(1))
-                                })
-                            )
-                        })
-                    )
+                    kind: ExpressionKind::LiteralValue(Value::int(2))
                 })
             )
         });

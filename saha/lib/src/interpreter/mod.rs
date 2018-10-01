@@ -34,10 +34,16 @@ pub struct AstVisitor<'a> {
 
 impl<'a> AstVisitor<'a> {
     /// Get a new AstVisitor instance for an AST.
-    pub fn new(ast: &'a Ast) -> AstVisitor<'a> {
+    pub fn new(ast: &'a Ast, visit_args: SahaFunctionArguments, self_ref: Option<Value>) -> AstVisitor<'a> {
+        let mut inject_local_refs: HashMap<String, (SahaType, Value)> = HashMap::new();
+
+        for (k, v) in visit_args {
+            inject_local_refs.insert(k, (v.kind.clone(), v));
+        }
+
         return AstVisitor {
             ast: ast,
-            local_refs: HashMap::new()
+            local_refs: inject_local_refs
         };
     }
 
@@ -178,14 +184,28 @@ impl<'a> AstVisitor<'a> {
         match &expression.kind {
             ExpressionKind::LiteralValue(val) => Ok(val.clone()),
             ExpressionKind::BinaryOperation(lhs, op, rhs) => self.visit_binop_expression(lhs, op, rhs),
+            ExpressionKind::UnaryOperation(unop, expr) => self.visit_unop(unop, expr),
+            ExpressionKind::Assignment(identpath, expr) => self.visit_assignment(identpath, expr),
             ExpressionKind::FunctionCall(identpath, call_args) => self.visit_callable_call(identpath, call_args),
-            ExpressionKind::IdentPath(root, members) => self.visit_ident_path(root, members),
+            ExpressionKind::IdentPath(root, members) => self.resolve_ident_path_to_value(root, members),
             _ => unimplemented!("{:?}", expression.kind)
         }
     }
 
+    /// Visit a name assignment node.
+    fn visit_assignment(&mut self, ident_path: &Box<Expression>, value_expr: &Box<Expression>) -> AstResult {
+        let (owner, access_kind, property) = self.resolve_ident_path(ident_path)?;
+        let value = self.visit_expression(value_expr)?;
+
+        if owner.is_none() {
+            return self.set_local_ref(property.identifier, value, &property.file_position);
+        } else {
+            unimplemented!()
+        }
+    }
+
     /// Visit and resolve an identifier path expression to a value.
-    fn visit_ident_path(&mut self, root: &Identifier, members: &Vec<(AccessKind, Identifier)>) -> AstResult {
+    fn resolve_ident_path_to_value(&mut self, root: &Identifier, members: &Vec<(AccessKind, Identifier)>) -> AstResult {
         if members.is_empty() {
             return self.get_local_ref(root.identifier.clone(), &root.file_position);
         }
@@ -325,43 +345,206 @@ impl<'a> AstVisitor<'a> {
     /// Visit binop expression.
     fn visit_binop_gt(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
         let lhs_value = self.visit_expression(lhs)?;
+        let rhs_value: Value = self.visit_expression(rhs)?;
 
-        unimplemented!()
+        let (lk, rk) = (lhs_value.kind, rhs_value.kind);
+        let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
+
+        let new_val: Value = match (lk, rk) {
+            (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() > rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.int.unwrap() > rhs_value.int.unwrap()),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Mismatching operands for operation: `{:?} > {:?}`", lkstr, rkstr),
+                    Some(op_pos.clone())
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        return Ok(new_val);
     }
 
     /// Visit binop expression.
     fn visit_binop_gte(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
         let lhs_value = self.visit_expression(lhs)?;
+        let rhs_value: Value = self.visit_expression(rhs)?;
 
-        unimplemented!()
+        let (lk, rk) = (lhs_value.kind, rhs_value.kind);
+        let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
+
+        let new_val: Value = match (lk, rk) {
+            (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() >= rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.int.unwrap() >= rhs_value.int.unwrap()),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Mismatching operands for operation: `{:?} >= {:?}`", lkstr, rkstr),
+                    Some(op_pos.clone())
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        return Ok(new_val);
     }
 
     /// Visit binop expression.
     fn visit_binop_lt(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
         let lhs_value = self.visit_expression(lhs)?;
+        let rhs_value: Value = self.visit_expression(rhs)?;
 
-        unimplemented!()
+        let (lk, rk) = (lhs_value.kind, rhs_value.kind);
+        let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
+
+        let new_val: Value = match (lk, rk) {
+            (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() < rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.int.unwrap() < rhs_value.int.unwrap()),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Mismatching operands for operation: `{:?} < {:?}`", lkstr, rkstr),
+                    Some(op_pos.clone())
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        return Ok(new_val);
     }
 
     /// Visit binop expression.
     fn visit_binop_lte(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
         let lhs_value = self.visit_expression(lhs)?;
+        let rhs_value: Value = self.visit_expression(rhs)?;
 
-        unimplemented!()
+        let (lk, rk) = (lhs_value.kind, rhs_value.kind);
+        let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
+
+        let new_val: Value = match (lk, rk) {
+            (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() <= rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.int.unwrap() <= rhs_value.int.unwrap()),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Mismatching operands for operation: `{:?} <= {:?}`", lkstr, rkstr),
+                    Some(op_pos.clone())
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        return Ok(new_val);
     }
 
     /// Visit binop expression.
     fn visit_binop_and(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
         let lhs_value = self.visit_expression(lhs)?;
 
-        unimplemented!()
+        match lhs_value.kind {
+            SahaType::Bool => {
+                if lhs_value.bool.unwrap() == false {
+                    // lhs is false so no point attempting to parse the right side for no reason
+                    return Ok(Value::bool(false));
+                }
+            },
+            _ => {
+                let err = RuntimeError::new("Invalid left operand for `&&`, not a boolean", Some(op_pos.clone()));
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        // we got this far because lhs is a true boolean value, lets check the right side
+
+        let rhs_value: Value = self.visit_expression(rhs)?;
+
+        match rhs_value.kind {
+            SahaType::Bool => {
+                if rhs_value.bool.unwrap() == false {
+                    // rhs is false so no matter what lhs was, we return false
+                    return Ok(Value::bool(false));
+                }
+            },
+            _ => {
+                let err = RuntimeError::new("Invalid right operand for `&&`, not a boolean", Some(op_pos.clone()));
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        // both true!
+        return Ok(Value::bool(true));
     }
 
     /// Visit binop expression.
     fn visit_binop_or(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
         let lhs_value = self.visit_expression(lhs)?;
 
-        unimplemented!()
+        match lhs_value.kind {
+            SahaType::Bool => {
+                if lhs_value.bool.unwrap() == true {
+                    // lhs is true so no point attempting to parse the right side for no reason
+                    return Ok(Value::bool(true));
+                }
+            },
+            _ => {
+                let err = RuntimeError::new("Invalid left operand for `&&`, not a boolean", Some(op_pos.clone()));
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        // we got this far because lhs is a true boolean value, lets check the right side
+
+        let rhs_value: Value = self.visit_expression(rhs)?;
+
+        match rhs_value.kind {
+            SahaType::Bool => {
+                if rhs_value.bool.unwrap() == true {
+                    // rhs is false so no matter what lhs was, we return false
+                    return Ok(Value::bool(true));
+                }
+            },
+            _ => {
+                let err = RuntimeError::new("Invalid right operand for `&&`, not a boolean", Some(op_pos.clone()));
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        // both false!
+        return Ok(Value::bool(false));
+    }
+
+    fn visit_unop(&mut self, unop: &UnaryOp, expr: &Box<Expression>) -> AstResult {
+        let expr_value = self.visit_expression(expr)?;
+
+        let new_val: Value = match unop.kind {
+            UnaryOpKind::Not => {
+                if let SahaType::Bool = expr_value.kind {
+                    Value::bool(!expr_value.bool.unwrap())
+                } else {
+                    let err = RuntimeError::new("Invalid unary negation operand, expected boolean", Some(unop.file_position.clone()));
+
+                    return Err(err.with_type("TypeError"));
+                }
+            },
+            UnaryOpKind::Minus => {
+                match expr_value.kind {
+                    SahaType::Int => Value::int(-expr_value.int.unwrap()),
+                    SahaType::Float => Value::float(-expr_value.float.unwrap()),
+                    _ => {
+                        let err = RuntimeError::new("Invalid unary minus operand, expected boolean", Some(unop.file_position.clone()));
+
+                        return Err(err.with_type("TypeError"));
+                    }
+                }
+            }
+        };
+
+        return Ok(new_val);
     }
 
     /// Visit a callable call.
@@ -377,7 +560,7 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Resolve an identifier path. First tuple member is a instref value
-    /// (optional), second is the method or property name.
+    /// (optional), third is the method or property name.
     fn resolve_ident_path(&mut self, path: &Box<Expression>) -> Result<(Option<Value>, Option<AccessKind>, Identifier), RuntimeError> {
         let mut member: Identifier; // callable name
         let mut owner: Option<Value> = None; // instref

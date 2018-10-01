@@ -8,5 +8,11 @@ function main() int
 
     print_line(text = to_print);
 
+    first = 1 + 2 + 3;
+    fstr = first->to_string();
+    to_print = "should be 6: 1 + 2 + 3 = " + fstr;
+
+    print_line(text = to_print);
+
     return 0;
 }

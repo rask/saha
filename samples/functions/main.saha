@@ -1,0 +1,11 @@
+function myfunc(text'str)
+{
+    print(text = text);
+}
+
+function main() int
+{
+    myfunc(text = "howdy");
+
+    return 0;
+}

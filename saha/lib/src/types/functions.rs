@@ -160,7 +160,8 @@ impl SahaCallable for UserFunction {
     fn call(&self, args: SahaFunctionArguments, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(&args)?;
 
-        let mut ast_visitor = AstVisitor::new(&self.ast);
+        // clone the args to miminize possibility of side effects
+        let mut ast_visitor = AstVisitor::new(&self.ast, args.clone(), None);
 
         return ast_visitor.start();
     }

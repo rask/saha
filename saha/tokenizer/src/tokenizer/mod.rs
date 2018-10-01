@@ -109,6 +109,7 @@ impl<'a> Tokenizer<'a> {
     fn parse_imports(&self, tokens: Vec<Token>, main_file: &PathBuf) -> TokenizationResult {
         let mut iterable = tokens.iter().peekable();
         let mut parsed: Vec<Token> = Vec::new();
+        let mut previous_token: Option<Token> = None;
 
         // name -> imported member
         let mut names_to_alias: HashMap<String, String> = HashMap::new();
@@ -223,8 +224,25 @@ impl<'a> Tokenizer<'a> {
                         }
                     }
                 },
-                _ => parsed.push(current_token.to_owned())
+                Token::Name(ref name_pos, ref alias, ref source) => {
+                    // here we declare aliasing for the pkg root stuff, like the program `main()`
+                    match previous_token.unwrap_or(Token::Eob) {
+                        Token::KwFunction(..)
+                        | Token::KwClass(..)
+                        | Token::KwBehavior(..) => {
+                            if &name_pos.path == main_file {
+                                names_to_alias.insert(source.clone(), format!("pkg.{}", alias));
+                            }
+
+                            parsed.push(current_token.clone());
+                        },
+                        _ => parsed.push(current_token.clone())
+                    }
+                },
+                _ => parsed.push(current_token.clone())
             };
+
+            previous_token = Some(current_token.clone());
         }
 
         let mut alias_previous: Option<Token> = None;
@@ -831,6 +849,63 @@ mod tests {
             Token::EndStatement(testfilepos()),
             Token::CurlyClose(testfilepos()),
         ];
+
+        assert_eq!(expected, tokens.unwrap());
+    }
+
+    #[test]
+    fn test_local_funcs_are_aliased() {
+        let testpath: PathBuf = get_test_main_file();
+
+        let lexemepos = testmainpos();
+
+        let lexemes = vec![
+            Lexeme::Word(lexemepos.clone(), "function".to_string()),
+            Lexeme::Whitespace(lexemepos.clone(), " ".to_string()),
+            Lexeme::Word(lexemepos.clone(), "myfunc".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), "(".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), ")".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), "{".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), "}".to_string()),
+            Lexeme::Newline(lexemepos.clone()),
+            Lexeme::Newline(lexemepos.clone()),
+            Lexeme::Word(lexemepos.clone(), "function".to_string()),
+            Lexeme::Whitespace(lexemepos.clone(), " ".to_string()),
+            Lexeme::Word(lexemepos.clone(), "main".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), "(".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), ")".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), "{".to_string()),
+            Lexeme::Newline(lexemepos.clone()),
+            Lexeme::Word(lexemepos.clone(), "myfunc".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), "(".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), ")".to_string()),
+            Lexeme::Symbol(lexemepos.clone(), ";".to_string()),
+            Lexeme::Newline(lexemepos.clone()),
+            Lexeme::Symbol(lexemepos.clone(), "}".to_string()),
+        ];
+
+        let expected = vec![
+            Token::KwFunction(lexemepos.clone()),
+            Token::Name(lexemepos.clone(), "pkg.myfunc".to_string(), "myfunc".to_string()),
+            Token::ParensOpen(lexemepos.clone()),
+            Token::ParensClose(lexemepos.clone()),
+            Token::CurlyOpen(lexemepos.clone()),
+            Token::CurlyClose(lexemepos.clone()),
+            Token::KwFunction(lexemepos.clone()),
+            Token::Name(lexemepos.clone(), "pkg.main".to_string(), "main".to_string()),
+            Token::ParensOpen(lexemepos.clone()),
+            Token::ParensClose(lexemepos.clone()),
+            Token::CurlyOpen(lexemepos.clone()),
+            Token::Name(lexemepos.clone(), "pkg.myfunc".to_string(), "myfunc".to_string()),
+            Token::ParensOpen(lexemepos.clone()),
+            Token::ParensClose(lexemepos.clone()),
+            Token::EndStatement(lexemepos.clone()),
+            Token::CurlyClose(lexemepos.clone()),
+        ];
+
+        let mut tokenizer = Tokenizer::new(lexemes, &testpath, String::from("pkg"));
+
+        let tokens = tokenizer.tokenize();
 
         assert_eq!(expected, tokens.unwrap());
     }

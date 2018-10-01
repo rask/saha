@@ -56,8 +56,8 @@ pub enum StatementKind {
     /// ```
     Expression(Box<Expression>),
 
-    /// If-clause. First is the condition, then the `true` block, after is a possible elseif
-    /// statements, finally and optional else block.
+    /// If-clause. First is the condition, then the `true` block, after is a
+    /// possible elseif statements, finally and optional else block.
     ///
     /// ```saha
     /// if (something) {
@@ -79,8 +79,8 @@ pub enum StatementKind {
     /// ```
     Loop(Box<Block>),
 
-    /// For block, first two are `k` and `v` of loop, followed with the iterable thing expression,
-    /// and last is the block which is looped over.
+    /// For block, first two are `k` and `v` of loop, followed with the iterable
+    /// thing expression, and last is the block which is looped over.
     ///
     /// ```saha
     /// for (k, v) in my_list {
@@ -150,7 +150,16 @@ pub enum ExpressionKind {
     /// Literal values in source.
     LiteralValue(Value),
 
-    /// Identifier path. The vec can be empty meaning a single identifier is only used. Examples:
+    /// Generic assignments. Variable name expression, and the expression to
+    /// assign to it.
+    ///
+    /// ```saha
+    /// my_ident = 1 + 2;
+    /// ```
+    Assignment(Box<Expression>, Box<Expression>),
+
+    /// Identifier path. The vec can be empty meaning a single identifier is
+    /// only used. Examples:
     ///
     /// ```saha
     /// name
@@ -203,7 +212,8 @@ pub enum ExpressionKind {
     /// Collection of callable args.
     CallableArgs(Vec<Box<Expression>>),
 
-    /// A single callable argument. Contains arg name and the value assigned to it.
+    /// A single callable argument. Contains arg name and the value assigned to
+    /// it.
     CallableArg(Identifier, Box<Expression>),
 
     /// Object access, first is the type, then the object we're accessing, then
@@ -275,8 +285,8 @@ pub enum BinOpKind {
 /// Unary operation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnaryOp {
-    file_position: FilePosition,
-    kind: UnaryOpKind
+    pub file_position: FilePosition,
+    pub kind: UnaryOpKind
 }
 
 /// Unary operation kind.
