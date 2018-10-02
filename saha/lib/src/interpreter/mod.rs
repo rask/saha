@@ -47,6 +47,38 @@ impl<'a> AstVisitor<'a> {
         };
     }
 
+    /// Get the class and behavior names an object implements.
+    fn get_object_implements(&self, obj: &Value) -> Vec<String> {
+        let instref = obj.obj.unwrap();
+        let inst = crate::SAHA_SYMBOL_TABLE.lock().unwrap().instances.get(&instref).unwrap().box_clone();
+
+        let mut impl_list = vec![inst.get_fully_qualified_class_name()];
+        let mut beh_impl = inst.get_implements();
+
+        impl_list.append(&mut beh_impl);
+
+        return impl_list;
+    }
+
+    fn is_matching_type(&self, expected: &SahaType, value: &Value) -> bool {
+        let is_match = match (expected, &value.kind) {
+            (SahaType::Bool, SahaType::Bool) => true,
+            (SahaType::Str, SahaType::Str) => true,
+            (SahaType::Int, SahaType::Int) => true,
+            (SahaType::Float, SahaType::Float) => true,
+            (SahaType::Name(ref exp_name), SahaType::Name(ref act_name)) => exp_name == act_name,
+            (SahaType::Name(exp_name), SahaType::Obj) => {
+                let mut allowed: Vec<String> = Vec::new();
+                let mut obj_implements: Vec<String> = self.get_object_implements(&value);
+
+                return obj_implements.contains(exp_name);
+            },
+            _ => false
+        };
+
+        return is_match;
+    }
+
     /// Create a local reference value.
     fn create_local_ref(&mut self, name: String, value: (SahaType, Value), refpos: &FilePosition) -> AstResult {
         if self.local_refs.get(&name).is_some() {
@@ -72,7 +104,7 @@ impl<'a> AstVisitor<'a> {
 
         let (old_type, old_value) = old.unwrap();
 
-        if old_type != &value.kind {
+        if self.is_matching_type(old_type, &value) == false {
             let err = RuntimeError::new(
                 &format!(
                     "Cannot assign mismatching type to variable `{}`, expected `{:?}` but received `{:?}`",
@@ -159,7 +191,7 @@ impl<'a> AstVisitor<'a> {
             let def_expr = var_default.clone().unwrap();
             default_value = self.visit_expression(&def_expr)?;
 
-            if var_type != &default_value.kind {
+            if self.is_matching_type(var_type, &default_value) == false {
                 let err = RuntimeError::new(
                     &format!(
                         "Mismatching type assigned to variable `{}`, expected `{:?}` but received `{:?}`",
@@ -663,7 +695,7 @@ impl<'a> AstVisitor<'a> {
             },
             SahaType::Obj => {
                 let instref: InstRef = obj.obj.unwrap();
-                let instance: Box<dyn SahaObject>;
+                let mut instance: Box<dyn SahaObject>;
 
                 {
                     let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
@@ -684,9 +716,12 @@ impl<'a> AstVisitor<'a> {
 
                 let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
 
-                unimplemented!()
+                let is_static_call = match access_kind {
+                    AccessKind::Instance => false,
+                    _ => true
+                };
 
-                //inst.call_member()
+                instance.call_member(callable.identifier.clone(), call_args, is_static_call, None, &Some(callable.file_position.clone()))
             },
             _ => {
                 let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;

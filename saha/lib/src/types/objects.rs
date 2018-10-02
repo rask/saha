@@ -29,15 +29,15 @@ pub trait SahaObject: Send {
     /// Call an object member, e.g. a method. We denote whether this is a static call, and we pass
     /// in an optional instance reference of the calling context (which is used to determine if this
     /// is a `self` call and allow access to private members).
-    fn call_member(&mut self, member: String, args: SahaFunctionArguments, static_access: bool, accessor_instref: Option<InstRef>) -> SahaCallResult;
+    fn call_member(&mut self, member: String, args: SahaFunctionArguments, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult;
 
     /// Access (get) a member property. Determine static access and `self` similarly to
     /// `call_member()`.
-    fn access_property(&self, prop: String, static_access: bool, accessor_instref: Option<InstRef>) -> SahaCallResult;
+    fn access_property(&self, prop: String, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult;
 
     /// Mutate (set) a member property. Determine static access and `self` similarly to
     /// `call_member()`.
-    fn mutate_property(&mut self, prop: String, static_access: bool, accessor_instref: Option<InstRef>) -> SahaCallResult;
+    fn mutate_property(&mut self, prop: String, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult;
 
     /// Clone for boxed self.
     fn box_clone(&self) -> Box<dyn SahaObject>;
@@ -199,15 +199,33 @@ impl SahaObject for UserInstance {
         return self.implements.clone();
     }
 
-    fn call_member(&mut self, member: String, args: SahaFunctionArguments, static_access: bool, accessor_instref: Option<InstRef>) -> SahaCallResult {
+    fn call_member(&mut self, member: String, args: SahaFunctionArguments, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult {
+        let is_self_internal_call: bool;
+
+        match accessor_instref {
+            Some(iref) => is_self_internal_call = self.get_instance_ref() == iref,
+            _ => is_self_internal_call = false
+        };
+
+        let member_callable = self.methods.get(&member);
+
+        if member_callable.is_none() {
+            let err = RuntimeError::new(
+                &format!("Attempted to call undefined method `{}` on class `{}`", member, self.get_fully_qualified_class_name()),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
         unimplemented!()
     }
 
-    fn access_property(&self, prop: String, static_access: bool, accessor_instref: Option<InstRef>) -> SahaCallResult {
+    fn access_property(&self, prop: String, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult {
         unimplemented!()
     }
 
-    fn mutate_property(&mut self, prop: String, static_access: bool, accessor_instref: Option<InstRef>) -> SahaCallResult {
+    fn mutate_property(&mut self, prop: String, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult {
         unimplemented!()
     }
 

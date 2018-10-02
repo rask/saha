@@ -84,10 +84,9 @@ fn populate_classes(parse_table: &ParseTable) -> Result<(), ParseError> {
     let mut st = SAHA_SYMBOL_TABLE.lock().unwrap();
 
     for (cname, c) in classes {
+        // FIXME handle methods and props here
         let mut methods: HashMap<String, Box<dyn SahaCallable>> = HashMap::new();
         let mut props: ObjProperties = HashMap::new();
-
-        unimplemented!();
 
         let cdef = ClassDefinition {
             name: c.source_name.clone(),
