@@ -407,7 +407,6 @@ impl<'a> AstParser<'a> {
             return Ok(binop_expr);
         }
 
-        // FIXME should the next predence be `minimum_op_precedence` or `next_min_precedence` here?
         return self.parse_binop_expression(binop_expr, 0);
     }
 

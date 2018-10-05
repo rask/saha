@@ -1,14 +1,36 @@
+behavior MyBehavior
+{
+    foo() int;
+    bar(meh'str = "asd") str;
+}
+
 class MyClass
 {
+    implements MyBehavior;
+
+    pub prop fooprop'int;
+    prop asdf'str = "hello";
+
     pub method foo() int
     {
-        return 1;
+        return self->fooprop;
+    }
+
+    pub method bar(meh'str = "asd") str
+    {
+        var temp'str = self->asdf;
+
+        return temp + meh;
     }
 }
 
 function main() int
 {
-    var mc'MyClass = new MyClass();
+    var mc'MyBehavior = new MyClass(fooprop = 1);
+
+    var some'str = mc->bar(meh = "asdfgh");
+
+    print(text = some);
 
     return mc->foo();
 }

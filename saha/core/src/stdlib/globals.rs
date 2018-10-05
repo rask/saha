@@ -22,6 +22,7 @@ pub fn get_saha_functions() -> Vec<(String, CoreFunction)> {
         "print",
         vec![
             ("text", FunctionParameter {
+                name: "text".to_string(),
                 param_type: SahaType::Str,
                 default: Value::void()
             })
@@ -34,6 +35,7 @@ pub fn get_saha_functions() -> Vec<(String, CoreFunction)> {
         "print_line",
         vec![
             ("text", FunctionParameter {
+                name: "text".to_string(),
                 param_type: SahaType::Str,
                 default: Value::void()
             })

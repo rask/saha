@@ -12,6 +12,15 @@ use crate::{
     }
 };
 
+/// A helper struct for constructing object member access, either method or
+/// property.
+pub struct AccessParams<'a> {
+    pub member_name: &'a str,
+    pub is_static_access: bool,
+    pub access_file_pos: &'a Option<FilePosition>,
+    pub accessor_instref: &'a Option<InstRef>
+}
+
 /// Instances of classes in saha, either core or userland.
 pub trait SahaObject: Send {
     /// Get the instance reference for this object.
@@ -29,15 +38,15 @@ pub trait SahaObject: Send {
     /// Call an object member, e.g. a method. We denote whether this is a static call, and we pass
     /// in an optional instance reference of the calling context (which is used to determine if this
     /// is a `self` call and allow access to private members).
-    fn call_member(&mut self, member: String, args: SahaFunctionArguments, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult;
+    fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult;
 
     /// Access (get) a member property. Determine static access and `self` similarly to
     /// `call_member()`.
-    fn access_property(&self, prop: String, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult;
+    fn access_property(&self, access: AccessParams) -> SahaCallResult;
 
     /// Mutate (set) a member property. Determine static access and `self` similarly to
     /// `call_member()`.
-    fn mutate_property(&mut self, prop: String, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult;
+    fn mutate_property(&mut self, access: AccessParams) -> SahaCallResult;
 
     /// Clone for boxed self.
     fn box_clone(&self) -> Box<dyn SahaObject>;
@@ -56,7 +65,8 @@ pub struct Property {
     pub prop_type: SahaType,
     pub default: Value,
     pub is_static: bool,
-    pub visibility: MemberVisibility
+    pub visibility: MemberVisibility,
+    pub value: Option<Value>
 }
 
 pub type ObjProperties = HashMap<String, Property>;
@@ -75,13 +85,14 @@ impl ValidatesArgs for ObjProperties {
         }
 
         for (pname, p) in self {
-            if p.default.kind == SahaType::Void {
-                // no default
-                if args.contains_key(pname) == false {
-                    let err = RuntimeError::new(&format!("The `{}` argument is required", pname), call_pos.to_owned());
+            if p.default.kind == SahaType::Void && args.contains_key(pname) == false {
+                // no default and no arg for it given
+                let err = RuntimeError::new(&format!("The `{}` argument is required", pname), call_pos.to_owned());
 
-                    return Err(err.with_type("InvalidArgumentError"));
-                }
+                return Err(err.with_type("InvalidArgumentError"));
+            } else if p.default.kind != SahaType::Void && args.contains_key(pname) == false {
+                // default exists and no args was provided, we're OK here
+                continue;
             }
 
             let propk = &p.prop_type;
@@ -93,16 +104,19 @@ impl ValidatesArgs for ObjProperties {
                         "Invalid argument `{}`, expected `{}` but received `{}`",
                         pname,
                         propk.to_readable_string(),
-                        argk.to_readable_string()),
+                        argk.to_readable_string()
+                    ),
                     call_pos.to_owned()
                 );
+
+                return Err(err.with_type("InvalidArgumentError"));
             }
         }
 
         return Ok(());
     }
 
-    fn validate_single_param_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
+    fn validate_single_param_args(&self, _args: &SahaFunctionArguments, _call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
         return Ok(());
     }
 }
@@ -127,17 +141,23 @@ impl ClassDefinition {
 
         for (pname, p) in &self.properties {
             if args.contains_key(pname) {
+                let arg_val: Value = args.get(pname).unwrap().clone();
+
                 let arg_prop: Property = Property {
                     name: p.name.clone(),
                     prop_type: p.prop_type.clone(),
-                    default: args.get(pname).unwrap().clone(),
+                    default: p.default.clone(),
                     is_static: p.is_static,
-                    visibility: p.visibility.clone()
+                    visibility: p.visibility.clone(),
+                    value: Some(arg_val)
                 };
 
                 inst_props.insert(pname.to_string(), arg_prop);
             } else {
-                inst_props.insert(pname.to_string(), p.clone());
+                let mut newprop = p.clone();
+                newprop.value = Some(p.default.clone());
+
+                inst_props.insert(pname.to_string(), newprop);
             }
         }
 
@@ -199,15 +219,19 @@ impl SahaObject for UserInstance {
         return self.implements.clone();
     }
 
-    fn call_member(&mut self, member: String, args: SahaFunctionArguments, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult {
+    fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
         let is_self_internal_call: bool;
+        let member = access.member_name;
+        let access_pos = access.access_file_pos;
+        let static_access = access.is_static_access;
+        let accessor_instref = access.accessor_instref;
 
         match accessor_instref {
-            Some(iref) => is_self_internal_call = self.get_instance_ref() == iref,
+            Some(iref) => is_self_internal_call = self.get_instance_ref() == *iref,
             _ => is_self_internal_call = false
         };
 
-        let member_callable = self.methods.get(&member);
+        let member_callable = self.methods.get(member);
 
         if member_callable.is_none() {
             let err = RuntimeError::new(
@@ -218,14 +242,109 @@ impl SahaObject for UserInstance {
             return Err(err.with_type("KeyError"));
         }
 
-        unimplemented!()
+        let member_callable = member_callable.unwrap();
+        let member_is_static = member_callable.is_static();
+        let member_is_public = member_callable.is_public();
+
+        if member_is_public == false && is_self_internal_call == false {
+            let err = RuntimeError::new(
+                &format!("Attempted to call private method `{}` on class `{}`", member, self.get_fully_qualified_class_name()),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        if member_is_static == true && static_access == false {
+            let err = RuntimeError::new(
+                &format!("Attempted to call static method `{}` unstatically on class `{}`", member, self.get_fully_qualified_class_name()),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        let mut call_args: SahaFunctionArguments = args.clone();
+
+        if member_is_static == false {
+            // insert `self` to the call
+            call_args.insert("self".to_string(), Value::obj(self.get_instance_ref()));
+        }
+
+        return member_callable.call(call_args, access_pos.clone());
     }
 
-    fn access_property(&self, prop: String, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult {
-        unimplemented!()
+    fn access_property(&self, access: AccessParams) -> SahaCallResult {
+        let is_self_internal_access: bool;
+        let prop = access.member_name;
+        let static_access = access.is_static_access;
+        let access_pos = access.access_file_pos;
+        let accessor_instref = access.accessor_instref;
+        let self_fqname = self.get_fully_qualified_class_name();
+
+        match accessor_instref {
+            Some(iref) => is_self_internal_access = self.get_instance_ref() == *iref,
+            _ => is_self_internal_access = false
+        };
+
+        let member_prop = self.properties.get(prop);
+
+        if member_prop.is_none() {
+            let err = RuntimeError::new(
+                &format!("Attempted to access undefined property `{}` on class `{}`", prop, self_fqname),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        let member_prop = member_prop.unwrap();
+        let member_is_static = member_prop.is_static;
+
+        let member_is_public = match member_prop.visibility {
+            MemberVisibility::Private => false,
+            _ => true
+        };
+
+        if member_is_public == false && is_self_internal_access == false {
+            let err = RuntimeError::new(
+                &format!("Attempted to access private property `{}` on class `{}`", prop, self_fqname),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        if member_is_static == true && static_access == false {
+            let err = RuntimeError::new(
+                &format!("Attempted to access static property `{}` unstatically on class `{}`", prop, self_fqname),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        } else if member_is_static == false && static_access == true {
+            let err = RuntimeError::new(
+                &format!("Attempted to access instance property `{}` statically on class `{}`", prop, self_fqname),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        match &member_prop.value {
+            Some(val) => Ok(val.clone()),
+            None => {
+                let err = RuntimeError::new(
+                    &format!("Attempted to access uninitialized property `{}` unstatically on class `{}`", prop, self_fqname),
+                    access_pos.to_owned()
+                );
+
+                return Err(err.with_type("KeyError"));
+            }
+        }
     }
 
-    fn mutate_property(&mut self, prop: String, static_access: bool, accessor_instref: Option<InstRef>, access_pos: &Option<FilePosition>) -> SahaCallResult {
+    fn mutate_property(&mut self, access: AccessParams) -> SahaCallResult {
         unimplemented!()
     }
 

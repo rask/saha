@@ -104,6 +104,10 @@ impl PartialEq for Value {
                 _ => false
             },
             SahaType::Obj => self.obj == other.obj,
+            SahaType::Void => match other.kind {
+                SahaType::Void => true,
+                _ => false
+            }
             _ => false
         }
     }
@@ -137,7 +141,7 @@ impl Debug for Value {
             SahaType::Bool => format!("{}", self.bool.unwrap()),
             SahaType::Str => (self.str).clone().unwrap(),
             SahaType::Name(n) => n.to_owned(),
-            SahaType::Obj => format!("{:?}", self.obj.unwrap())
+            SahaType::Obj => format!("{:?}", self.obj.unwrap()),
         };
 
         return write!(f, "Value::{:?}({})", self.kind, value_str);

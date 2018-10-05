@@ -223,6 +223,15 @@ impl<'a> RootParser<'a> {
                 _ => unreachable!()
             };
 
+            if param_name == "self" {
+                let err = ParseError::new(
+                    "Invalid parameter definition, `self` is a reserved parameter name",
+                    Some(self.ctok.unwrap().get_file_position())
+                );
+
+                return Err(err);
+            }
+
             self.consume_next(vec!["'"])?;
 
             self.consume_next(vec!["typestring", "typeinteger", "typefloat", "typeboolean", "name"])?;
@@ -266,12 +275,14 @@ impl<'a> RootParser<'a> {
                     }
 
                     paramdef = FunctionParameter {
+                        name: param_name.clone(),
                         param_type: param_type,
                         default: default
                     };
                 },
                 _ => {
                     paramdef = FunctionParameter {
+                        name: param_name.clone(),
                         param_type: param_type,
                         default: Value::void()
                     };
@@ -501,13 +512,13 @@ impl<'a> RootParser<'a> {
                 Token::KwPublic(..) => {
                     member_visibility = MemberVisibility::Public;
 
-                    self.consume_next(vec!["static", "method", "property"])?;
+                    self.consume_next(vec!["static", "method", "prop"])?;
 
                     match self.ctok.unwrap() {
                         Token::KwStatic(..) => {
                             member_is_static = true;
 
-                            self.consume_next(vec!["method", "property"])?;
+                            self.consume_next(vec!["method", "prop"])?;
 
                             match self.ctok.unwrap() {
                                 Token::KwMethod(..) => {
@@ -567,13 +578,13 @@ impl<'a> RootParser<'a> {
                 Token::KwStatic(..) => {
                     member_is_static = true;
 
-                    self.consume_next(vec!["pub", "method", "property"])?;
+                    self.consume_next(vec!["pub", "method", "prop"])?;
 
                     match self.ctok.unwrap() {
                         Token::KwPublic(..) => {
                             member_visibility = MemberVisibility::Public;
 
-                            self.consume_next(vec!["method", "property"])?;
+                            self.consume_next(vec!["method", "prop"])?;
 
                             match self.ctok.unwrap() {
                                 Token::KwMethod(..) => {

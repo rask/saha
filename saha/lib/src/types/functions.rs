@@ -5,7 +5,10 @@ use std::any::Any;
 
 use crate::{
     ast::Ast,
-    types::{Value, SahaType},
+    types::{
+        Value, SahaType,
+        objects::MemberVisibility
+    },
     errors::{Error, RuntimeError},
     source::files::FilePosition,
     interpreter::AstVisitor
@@ -22,8 +25,9 @@ pub type SahaFunctionParamDefs = HashMap<String, FunctionParameter>;
 pub type SahaFunctionArguments = HashMap<String, Value>;
 
 /// A single function parameter which Saha functions can accept.
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionParameter {
+    pub name: String,
     pub param_type: SahaType,
     pub default: Value
 }
@@ -112,7 +116,7 @@ pub struct UserFunction {
     pub params: SahaFunctionParamDefs,
     pub return_type: SahaType,
     pub ast: Ast,
-    pub is_public: bool,
+    pub visibility: MemberVisibility,
     pub is_static: bool
 }
 
@@ -161,9 +165,25 @@ impl SahaCallable for UserFunction {
         self.params.validate_args(&args, &call_source_position)?;
 
         // clone the args to miminize possibility of side effects
-        let mut ast_visitor = AstVisitor::new(&self.ast, args.clone(), None);
+        let mut ast_visitor = AstVisitor::new(&self.ast, args.clone());
 
-        return ast_visitor.start();
+        let res = ast_visitor.start()?;
+
+        if res.kind != self.return_type {
+            let err = RuntimeError::new(
+                &format!(
+                    "Return type mismatch for `{}`, expected `{:?}` but received `{:?}`",
+                    self.name,
+                    self.return_type,
+                    res.kind
+                ),
+                call_source_position
+            );
+
+            return Err(err.with_type("ValueError"));
+        }
+
+        return Ok(res);
     }
 
     fn get_parameters(&self) -> SahaFunctionParamDefs {
@@ -183,7 +203,10 @@ impl SahaCallable for UserFunction {
     }
 
     fn is_public(&self) -> bool {
-        return self.is_public;
+        match self.visibility {
+            MemberVisibility::Private => false,
+            _ => true
+        }
     }
 
     fn is_static(&self) -> bool {
@@ -213,7 +236,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                 // no arg and no default, which is a no-no
                 let err = RuntimeError::new(
                     &format!("Invalid arguments, argument `{}` missing", param_name),
-                    None
+                    call_pos.to_owned()
                 );
 
                 return Err(err.with_type("InvalidArgumentError"));
@@ -234,7 +257,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                     param_type.to_readable_string(),
                     arg.kind.to_readable_string()
                 ),
-                None
+                call_pos.to_owned()
             );
 
             return Err(err.with_type("InvalidArgumentError"));
@@ -264,7 +287,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                     SahaType::Void => {
                         let err = RuntimeError::new(
                             &format!("Invalid arguments, argument `{}` missing", name),
-                            None
+                            call_pos.to_owned()
                         );
 
                         return Err(err.with_type("InvalidArgumentError"));
@@ -284,7 +307,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                         param_type.to_readable_string(),
                         arg.kind.to_readable_string()
                     ),
-                    None
+                    call_pos.to_owned()
                 );
 
                 return Err(err.with_type("InvalidArgumentError"));

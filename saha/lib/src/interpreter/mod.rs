@@ -6,14 +6,17 @@
 
 use noisy_float::prelude::*;
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, MutexGuard}
+};
 
 use crate::{
     ast::*,
     source::files::FilePosition,
     types::{
         Value, SahaType,
-        objects::SahaObject,
+        objects::{AccessParams, SahaObject},
         functions::{
             SahaFunctionArguments,
             SahaCallable
@@ -29,20 +32,28 @@ type AstResult = Result<Value, RuntimeError>;
 /// them to a single thing: a Saha value.
 pub struct AstVisitor<'a> {
     ast: &'a Ast,
+    self_ref: Option<InstRef>,
     local_refs: HashMap<String, (SahaType, Value)>
 }
 
 impl<'a> AstVisitor<'a> {
     /// Get a new AstVisitor instance for an AST.
-    pub fn new(ast: &'a Ast, visit_args: SahaFunctionArguments, self_ref: Option<Value>) -> AstVisitor<'a> {
+    pub fn new(ast: &'a Ast, visit_args: SahaFunctionArguments) -> AstVisitor<'a> {
         let mut inject_local_refs: HashMap<String, (SahaType, Value)> = HashMap::new();
+        let mut self_ref: Option<InstRef> = None;
 
         for (k, v) in visit_args {
+            if &k == "self" {
+                let instref_src = v.clone();
+                self_ref = Some(instref_src.obj.unwrap());
+            }
+
             inject_local_refs.insert(k, (v.kind.clone(), v));
         }
 
         return AstVisitor {
             ast: ast,
+            self_ref: self_ref,
             local_refs: inject_local_refs
         };
     }
@@ -50,7 +61,9 @@ impl<'a> AstVisitor<'a> {
     /// Get the class and behavior names an object implements.
     fn get_object_implements(&self, obj: &Value) -> Vec<String> {
         let instref = obj.obj.unwrap();
-        let inst = crate::SAHA_SYMBOL_TABLE.lock().unwrap().instances.get(&instref).unwrap().box_clone();
+        let instmutex: Arc<Mutex<Box<dyn SahaObject>>> = crate::SAHA_SYMBOL_TABLE.lock().unwrap().instances.get(&instref).unwrap().clone();
+
+        let inst = instmutex.lock().unwrap();
 
         let mut impl_list = vec![inst.get_fully_qualified_class_name()];
         let mut beh_impl = inst.get_implements();
@@ -144,6 +157,22 @@ impl<'a> AstVisitor<'a> {
         return Ok(value.clone());
     }
 
+    /// Get an Arced Mutex to a single saha object instance.
+    fn get_instance_lockable_ref(&mut self, instref: &InstRef, access_pos: FilePosition) -> Result<Arc<Mutex<Box<dyn SahaObject>>>, RuntimeError> {
+        let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+        if st.instances.contains_key(instref) == false {
+            let err = RuntimeError::new(
+                "Cannot access undefined instance",
+                Some(access_pos)
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        return Ok(st.instances.get(instref).unwrap().clone());
+    }
+
     /// Start visiting.
     pub fn start(&mut self) -> AstResult {
         return self.visit_block(&self.ast.entrypoint);
@@ -219,7 +248,7 @@ impl<'a> AstVisitor<'a> {
             ExpressionKind::UnaryOperation(unop, expr) => self.visit_unop(unop, expr),
             ExpressionKind::Assignment(identpath, expr) => self.visit_assignment(identpath, expr),
             ExpressionKind::FunctionCall(identpath, call_args) => self.visit_callable_call(identpath, call_args),
-            ExpressionKind::IdentPath(root, members) => self.resolve_ident_path_to_value(root, members),
+            ExpressionKind::IdentPath(..) => self.resolve_ident_path_to_value(&expression),
             ExpressionKind::NewInstance(ident, args) => self.visit_instance_newup(ident, args),
             _ => unimplemented!("{:?}", expression.kind)
         }
@@ -238,12 +267,16 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Visit and resolve an identifier path expression to a value.
-    fn resolve_ident_path_to_value(&mut self, root: &Identifier, members: &Vec<(AccessKind, Identifier)>) -> AstResult {
-        if members.is_empty() {
-            return self.get_local_ref(root.identifier.clone(), &root.file_position);
+    fn resolve_ident_path_to_value(&mut self, ident_path: &Box<Expression>) -> AstResult {
+        let (root, acckind, member) = self.resolve_ident_path(ident_path)?;
+
+        if root.is_none() {
+            return self.get_local_ref(member.identifier.clone(), &ident_path.file_position);
         }
 
-        unimplemented!()
+        let access_val: Value = self.access_object_property(root.unwrap(), acckind.unwrap_or(AccessKind::Instance), member)?;
+
+        return Ok(access_val);
     }
 
     /// Visit a binary operation expression.
@@ -629,7 +662,40 @@ impl<'a> AstVisitor<'a> {
 
     /// Access an object property and get the value it contains.
     fn access_object_property(&mut self, obj: Value, access_kind: AccessKind, property_name: Identifier) -> AstResult {
-        unimplemented!()
+        let result_value: Value;
+        let inst_lockable: Arc<Mutex<Box<dyn SahaObject>>>;
+
+        match obj.kind {
+            SahaType::Obj => (),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Attempted to access property `{}` of a non-object value", property_name.identifier),
+                    Some(property_name.file_position)
+                );
+
+                return Err(err.with_type("KeyError"));
+            }
+        };
+
+        let inst_lockable = self.get_instance_lockable_ref(&obj.obj.unwrap(), property_name.file_position.clone())?;
+
+        let is_static_access = match access_kind {
+            AccessKind::Static => true,
+            _ => false
+        };
+
+        let instref_ctx = self.self_ref;
+
+        let access = AccessParams {
+            is_static_access: is_static_access,
+            member_name: &property_name.identifier,
+            accessor_instref: &self.self_ref,
+            access_file_pos: &Some(property_name.file_position)
+        };
+
+        result_value = inst_lockable.lock().unwrap().access_property(access)?;
+
+        return Ok(result_value);
     }
 
     /// Resolve an identifier name to a local ref table value.
@@ -695,24 +761,18 @@ impl<'a> AstVisitor<'a> {
             },
             SahaType::Obj => {
                 let instref: InstRef = obj.obj.unwrap();
+                let instopt: Arc<Mutex<Box<dyn SahaObject>>>;
                 let mut instance: Box<dyn SahaObject>;
 
-                {
-                    let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+                instopt = self.get_instance_lockable_ref(&obj.obj.unwrap(), callable.file_position.clone())?;
 
-                    if st.instances.contains_key(&instref) == false {
-                        let err = RuntimeError::new(
-                            "Cannot call method on undefined instance",
-                            Some(callable.file_position.clone())
-                        );
+                instance = instopt.lock().unwrap().clone();
 
-                        return Err(err.with_type("KeyError"));
-                    }
+                drop(instopt); // drop the locked mutex here to prevent lockups if `self` stuff is
+                // access inside the upcoming method call
 
-                    let instopt = st.instances.get(&instref).unwrap();
-
-                    instance = instopt.clone();
-                }
+                // the drop above releases the lock, so we need to validate how to manage data
+                // races when it comes to instances
 
                 let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
 
@@ -721,7 +781,14 @@ impl<'a> AstVisitor<'a> {
                     _ => true
                 };
 
-                instance.call_member(callable.identifier.clone(), call_args, is_static_call, None, &Some(callable.file_position.clone()))
+                let access = AccessParams {
+                    is_static_access: is_static_call,
+                    member_name: &callable.identifier,
+                    accessor_instref: &self.self_ref,
+                    access_file_pos: &Some(callable.file_position.clone())
+                };
+
+                instance.call_member(access, call_args)
             },
             _ => {
                 let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;

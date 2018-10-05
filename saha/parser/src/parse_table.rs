@@ -19,7 +19,7 @@ use saha_lib::{
 };
 
 /// Function defintion, from which a callable can be built from.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FunctionDefinition {
     pub name: String,
     pub source_name: String,
@@ -81,3 +81,17 @@ impl ParseTable {
         };
     }
 }
+
+impl PartialEq for FunctionDefinition {
+    fn eq(&self, other: &FunctionDefinition) -> bool {
+        let name_match = self.name == other.name;
+        let params_match = self.parameters == other.parameters;
+        let ret_match = self.return_type == other.return_type;
+        let static_match = self.is_static == other.is_static;
+        let pub_match = self.visibility == other.visibility;
+
+        return name_match && params_match && ret_match && static_match && pub_match;
+    }
+}
+
+impl Eq for FunctionDefinition {}

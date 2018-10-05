@@ -5,7 +5,11 @@
 //!
 //! All declarations and globals are stored in the symbol table.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex}
+};
+
 use uuid::Uuid;
 
 use crate::{
@@ -28,7 +32,7 @@ pub struct SymbolTable {
     pub functions: HashMap<String, Box<dyn SahaCallable>>,
     pub behaviors: HashMap<String, BehaviorDefinition>,
     pub classes: HashMap<String, ClassDefinition>,
-    pub instances: HashMap<InstRef, Box<dyn SahaObject>>,
+    pub instances: HashMap<InstRef, Arc<Mutex<Box<dyn SahaObject>>>>,
 }
 
 impl SymbolTable {
@@ -73,7 +77,7 @@ impl SymbolTable {
 
         let inst: Box<dyn SahaObject> = def.create_new_instance(instref, args, create_pos)?;
 
-        self.instances.insert(instref, inst);
+        self.instances.insert(instref, Arc::new(Mutex::new(inst)));
 
         return Ok(Value::obj(instref));
     }
