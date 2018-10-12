@@ -552,6 +552,9 @@ impl<'a> AstParser<'a> {
     }
 
     /// Parse a single function call argument.
+    ///
+    /// FIXME: allow parsing a single arg without a name, in case we're calling
+    /// a callable that receives a single parameter
     fn parse_callable_arg(&mut self) -> PR<Box<Expression>> {
         self.consume_next(vec!["name"])?;
 

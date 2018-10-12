@@ -42,7 +42,7 @@ pub trait ValidatesArgs {
 }
 
 /// Anything which can be called in Saha. Functions and methods mainly.
-pub trait SahaCallable: Send {
+pub trait SahaCallable: Send + Sync {
     /// Call this callable.
     fn call(&self, args: SahaFunctionArguments, call_source_position: Option<FilePosition>) -> SahaCallResult;
 
@@ -226,13 +226,21 @@ impl ValidatesArgs for SahaFunctionParamDefs {
     /// Validate args in a situation where there is only a single parameter defined, which means
     /// we can call the function with no parameter name defined (to make code a little leaner).
     fn validate_single_param_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
+        let mut validation_args: SahaFunctionArguments = args.clone();
+
+        if validation_args.contains_key("self") {
+            // remove self or this single params validation will explode randomly as the arg order
+            // might be different on each call
+            validation_args.remove("self");
+        }
+
         let param_name = self.keys().nth(0).unwrap();
         let param = self.values().nth(0).unwrap();
         let param_default = &param.default;
         let param_type = &param.param_type;
 
         if let SahaType::Void = param_default.kind {
-            if args.is_empty() {
+            if validation_args.is_empty() {
                 // no arg and no default, which is a no-no
                 let err = RuntimeError::new(
                     &format!("Invalid arguments, argument `{}` missing", param_name),
@@ -246,7 +254,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
             }
         }
 
-        let arg = args.values().nth(0).unwrap();
+        let arg = validation_args.values().nth(0).unwrap();
 
         // arg type mismatch
         if arg.kind != *param_type {

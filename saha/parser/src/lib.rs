@@ -175,12 +175,15 @@ fn populate_classes(parse_table: &ParseTable) -> Result<(), ParseError> {
         let cdef = ClassDefinition {
             name: c.source_name.clone(),
             fqname: c.name.clone(),
-            methods: methods,
             properties: props,
             implements: c.implements.clone()
         };
 
-        st.classes.insert(cname, cdef);
+        st.classes.insert(cname.clone(), cdef);
+
+        for (_, m) in &methods {
+            st.add_method(&cname, &m);
+        }
     }
 
     return Ok(());

@@ -80,12 +80,7 @@ impl<'a> AstVisitor<'a> {
             (SahaType::Int, SahaType::Int) => true,
             (SahaType::Float, SahaType::Float) => true,
             (SahaType::Name(ref exp_name), SahaType::Name(ref act_name)) => exp_name == act_name,
-            (SahaType::Name(exp_name), SahaType::Obj) => {
-                let mut allowed: Vec<String> = Vec::new();
-                let mut obj_implements: Vec<String> = self.get_object_implements(&value);
-
-                return obj_implements.contains(exp_name);
-            },
+            (SahaType::Name(exp_name), SahaType::Obj) => self.get_object_implements(&value).contains(exp_name),
             _ => false
         };
 
@@ -115,7 +110,7 @@ impl<'a> AstVisitor<'a> {
             return Err(err.with_type("KeyError"));
         }
 
-        let (old_type, old_value) = old.unwrap();
+        let (old_type, _) = old.unwrap();
 
         if self.is_matching_type(old_type, &value) == false {
             let err = RuntimeError::new(
@@ -260,8 +255,10 @@ impl<'a> AstVisitor<'a> {
         let value = self.visit_expression(value_expr)?;
 
         if owner.is_none() {
+            // local ref assign
             return self.set_local_ref(property.identifier, value, &property.file_position);
         } else {
+            // property assign
             unimplemented!()
         }
     }

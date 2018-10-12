@@ -1,6 +1,9 @@
 //! Saha object types
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex}
+};
 
 use crate::{
     symbol_table::InstRef,
@@ -35,9 +38,17 @@ pub trait SahaObject: Send {
     /// Get a list of behavior names that this object implements.
     fn get_implements(&self) -> Vec<String>;
 
-    /// Call an object member, e.g. a method. We denote whether this is a static call, and we pass
-    /// in an optional instance reference of the calling context (which is used to determine if this
-    /// is a `self` call and allow access to private members).
+    /// Get a full method name to use when getting a reference to a class
+    /// method.
+    fn get_full_method_name(&mut self, method_name: &str) -> String;
+
+    /// Get a lockable Arc ref to a method.
+    fn get_method_ref(&mut self, method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError>;
+
+    /// Call an object member, e.g. a method. We denote whether this is a static
+    /// call, and we pass in an optional instance reference of the calling
+    /// context (which is used to determine if this is a `self` call and allow
+    /// access to private members).
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult;
 
     /// Access (get) a member property. Determine static access and `self` similarly to
@@ -127,7 +138,6 @@ pub struct ClassDefinition {
     pub name: String,
     pub fqname: String,
     pub properties: ObjProperties,
-    pub methods: HashMap<String, Box<dyn SahaCallable>>,
     pub implements: Vec<String>
 }
 
@@ -137,7 +147,6 @@ impl ClassDefinition {
         self.properties.validate_args(&args, create_pos)?;
 
         let mut inst_props: ObjProperties = HashMap::new();
-        let mut inst_methods: HashMap<String, Box<dyn SahaCallable>> = HashMap::new();
 
         for (pname, p) in &self.properties {
             if args.contains_key(pname) {
@@ -161,15 +170,9 @@ impl ClassDefinition {
             }
         }
 
-        for (mname, m) in &self.methods {
-            // FIXME how to reference these without cloning them all over the place
-            inst_methods.insert(mname.to_string(), m.box_clone());
-        }
-
         return Ok(Box::new(UserInstance {
             class_name: self.name.clone(),
             fq_class_name: self.fqname.clone(),
-            methods: inst_methods,
             properties: inst_props,
             implements: self.implements.clone(),
             inst_ref: inst_ref
@@ -198,7 +201,6 @@ pub struct UserInstance {
     fq_class_name: String,
     inst_ref: InstRef,
     implements: Vec<String>,
-    methods: HashMap<String, Box<SahaCallable>>,
     properties: HashMap<String, Property>
 }
 
@@ -219,6 +221,27 @@ impl SahaObject for UserInstance {
         return self.implements.clone();
     }
 
+    fn get_full_method_name(&mut self, method_name: &str) -> String {
+        return format!("{}#{}", self.get_fully_qualified_class_name(), method_name);
+    }
+
+    fn get_method_ref(&mut self, method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError> {
+        let full_method_name = self.get_full_method_name(method_name);
+
+        let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+        if st.methods.contains_key(&full_method_name) == false {
+            let err = RuntimeError::new(&format!("No method `{}` defined in class `{}`", method_name, self.get_fully_qualified_class_name()), None);
+
+            return Err(err);
+        }
+
+        let method_callable: Arc<Box<dyn SahaCallable>> = st.methods.get(&full_method_name).unwrap().clone();
+
+        // clone arc ref and return it
+        return Ok(method_callable);
+    }
+
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
         let is_self_internal_call: bool;
         let member = access.member_name;
@@ -231,18 +254,19 @@ impl SahaObject for UserInstance {
             _ => is_self_internal_call = false
         };
 
-        let member_callable = self.methods.get(member);
+        let member_callable = self.get_method_ref(member);
 
-        if member_callable.is_none() {
+        if member_callable.is_err() {
             let err = RuntimeError::new(
-                &format!("Attempted to call undefined method `{}` on class `{}`", member, self.get_fully_qualified_class_name()),
+                &member_callable.err().unwrap().get_message(),
                 access_pos.to_owned()
             );
 
             return Err(err.with_type("KeyError"));
         }
 
-        let member_callable = member_callable.unwrap();
+        // callable result contains an arc and mutex which we need to lock and unwrap
+        let member_callable = member_callable.ok().unwrap();
         let member_is_static = member_callable.is_static();
         let member_is_public = member_callable.is_public();
 
@@ -264,6 +288,7 @@ impl SahaObject for UserInstance {
             return Err(err.with_type("KeyError"));
         }
 
+        // clone here to prevent any accidental side effects
         let mut call_args: SahaFunctionArguments = args.clone();
 
         if member_is_static == false {

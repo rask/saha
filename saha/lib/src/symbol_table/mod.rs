@@ -28,10 +28,53 @@ pub type InstRef = [u8; 16];
 /// Symbol table, stores global parsed declarations and definitions, in addition
 /// to references to things that should be available globally.
 pub struct SymbolTable {
+    /// Constants are global and static values which are defined and loaded
+    /// before any application logic execution begins. Constants are defined
+    /// with the `const` keyword and their names should contains only uppercase
+    /// letters and underscores.
     pub constants: HashMap<String, Value>,
+
+    /// Functions are top-level function declarations defined with the
+    /// `function` keyword.
     pub functions: HashMap<String, Box<dyn SahaCallable>>,
+
+    /// Behaviors are top-level behavior declarations. Behaviors are often
+    /// called _interfaces_ in other languages.
+    ///
+    /// Behaviors define a public API which the implementors of each behavior
+    /// must implement exactly as defined.
     pub behaviors: HashMap<String, BehaviorDefinition>,
+
+    /// Class declarations. Each class has a name, properties, behavior
+    /// implementations, and methods. Class methods can be private or public,
+    /// instance or static.
+    ///
+    /// Methods are stored into a separate symbol table collection to separate
+    /// instances (data) and logic that modifies instances.
     pub classes: HashMap<String, ClassDefinition>,
+
+    /// Class methods. These are the same as functions, but the naming
+    /// convention goes as such:
+    ///
+    /// ```txt
+    /// fully.qualified.className#methodName
+    /// ```
+    ///
+    /// Where the `#` separates the class name to which the method is tied to,
+    /// and the method name which is defined for the method.
+    ///
+    /// Method callable itself stores information on whether the method is
+    /// public or private, and whether it is instanced or static. Static methods
+    /// receive no `self` parameter.
+    pub methods: HashMap<String, Arc<Box<dyn SahaCallable>>>,
+
+    /// Class instances (data) are stored here. They are behind an Arc and a
+    /// Mutex to keep things consistent in case multiple points of an
+    /// application want to modify or interact with the same instance at the
+    /// same time.
+    ///
+    /// Instances contain only the data of a class instance, methods are stored
+    /// centrally in another HashMap.
     pub instances: HashMap<InstRef, Arc<Mutex<Box<dyn SahaObject>>>>,
 }
 
@@ -43,6 +86,7 @@ impl SymbolTable {
             functions: HashMap::new(),
             behaviors: HashMap::new(),
             classes: HashMap::new(),
+            methods: HashMap::new(),
             instances: HashMap::new(),
         };
     }
@@ -58,6 +102,14 @@ impl SymbolTable {
 
         // FIXME prevent overrides
         self.functions.insert(fn_name, func);
+    }
+
+    /// Add a new method.
+    pub fn add_method(&mut self, class_name: &String, method: &Box<dyn SahaCallable>) {
+        let method_name = method.get_name().clone();
+        let fq_method_name = format!("{}#{}", class_name, method_name);
+
+        self.methods.insert(fq_method_name, Arc::new(method.clone()));
     }
 
     /// Insert a new object instance to the symbol table, and then return the
