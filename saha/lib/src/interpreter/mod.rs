@@ -259,7 +259,25 @@ impl<'a> AstVisitor<'a> {
             return self.set_local_ref(property.identifier, value, &property.file_position);
         } else {
             // property assign
-            unimplemented!()
+            let obj = owner.unwrap();
+
+            let inst_lockable = self.get_instance_lockable_ref(&obj.obj.unwrap(), property.file_position.clone())?;
+
+            let is_static_access = match access_kind.unwrap() {
+                AccessKind::Static => true,
+                _ => false
+            };
+
+            let access = AccessParams {
+                is_static_access: is_static_access,
+                member_name: &property.identifier,
+                accessor_instref: &self.self_ref,
+                access_file_pos: &Some(property.file_position)
+            };
+
+            let result_value = inst_lockable.lock().unwrap().mutate_property(access, value)?;
+
+            return Ok(result_value);
         }
     }
 

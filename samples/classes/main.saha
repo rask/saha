@@ -20,6 +20,8 @@ class MyClass
     {
         var temp'str = self->asdf;
 
+        self->fooprop = 3;
+
         return temp + meh;
     }
 }

@@ -51,13 +51,13 @@ pub trait SahaObject: Send {
     /// access to private members).
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult;
 
-    /// Access (get) a member property. Determine static access and `self` similarly to
-    /// `call_member()`.
+    /// Access (get) a member property. Determine static access and `self`
+    /// similarly to `call_member()`.
     fn access_property(&self, access: AccessParams) -> SahaCallResult;
 
-    /// Mutate (set) a member property. Determine static access and `self` similarly to
-    /// `call_member()`.
-    fn mutate_property(&mut self, access: AccessParams) -> SahaCallResult;
+    /// Mutate (set) a member property. Determine static access and `self`
+    /// similarly to `call_member()`.
+    fn mutate_property(&mut self, access: AccessParams, new_value: Value) -> SahaCallResult;
 
     /// Clone for boxed self.
     fn box_clone(&self) -> Box<dyn SahaObject>;
@@ -78,6 +78,17 @@ pub struct Property {
     pub is_static: bool,
     pub visibility: MemberVisibility,
     pub value: Option<Value>
+}
+
+impl Property {
+    /// Return the same property as a clone with a newly replaced value.
+    fn with_value(&self, new_value: &Value) -> Property {
+        let mut new = self.clone();
+
+        new.value = Some(new_value.clone());
+
+        return new;
+    }
 }
 
 pub type ObjProperties = HashMap<String, Property>;
@@ -369,8 +380,83 @@ impl SahaObject for UserInstance {
         }
     }
 
-    fn mutate_property(&mut self, access: AccessParams) -> SahaCallResult {
-        unimplemented!()
+    fn mutate_property(&mut self, access: AccessParams, new_value: Value) -> SahaCallResult {
+        let is_self_internal_access: bool;
+        let prop = access.member_name;
+        let static_access = access.is_static_access;
+        let access_pos = access.access_file_pos;
+        let accessor_instref = access.accessor_instref;
+        let self_fqname = self.get_fully_qualified_class_name();
+
+        match accessor_instref {
+            Some(iref) => is_self_internal_access = self.get_instance_ref() == *iref,
+            _ => is_self_internal_access = false
+        };
+
+        let member_prop = self.properties.get(prop);
+
+        if member_prop.is_none() {
+            let err = RuntimeError::new(
+                &format!("Attempted to mutate undefined property `{}` on class `{}`", prop, self_fqname),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        let member_prop = member_prop.unwrap();
+        let member_is_static = member_prop.is_static;
+
+        let member_is_public = match member_prop.visibility {
+            MemberVisibility::Private => false,
+            _ => true
+        };
+
+        if member_is_public == false && is_self_internal_access == false {
+            let err = RuntimeError::new(
+                &format!("Attempted to mutate private property `{}` on class `{}`", prop, self_fqname),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        if member_is_static == true && static_access == false {
+            let err = RuntimeError::new(
+                &format!("Attempted to mutate static property `{}` unstatically on class `{}`", prop, self_fqname),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        } else if member_is_static == false && static_access == true {
+            let err = RuntimeError::new(
+                &format!("Attempted to mutate instance property `{}` statically on class `{}`", prop, self_fqname),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("KeyError"));
+        }
+
+        if member_prop.prop_type != new_value.kind {
+            let err = RuntimeError::new(
+                &format!(
+                    "Type mismatch when attempting to mutate property `{}` on class `{}`, expected `{:?}` but received `{:?}`",
+                    prop,
+                    self_fqname,
+                    member_prop.prop_type.clone(),
+                    new_value.kind.clone()
+                ),
+                access_pos.to_owned()
+            );
+
+            return Err(err.with_type("TypeError"));
+        }
+
+        let new_prop = member_prop.with_value(&new_value);
+
+        self.properties.insert(member_prop.name.clone(), new_prop);
+
+        return Ok(Value::void());
     }
 
     fn box_clone(&self) -> Box<dyn SahaObject> {
