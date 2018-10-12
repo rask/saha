@@ -1,6 +1,28 @@
+function succeeds() int
+{
+    return 1;
+}
+
+function errors() int
+{
+    raise new RuntimeError(description = "unknown error");
+}
+
 function main() int
 {
     var cond1'bool = true;
+
+    try {
+        var foo'int = succeeds();
+    } catch (RuntimeError e) {
+        print_line(text = "FAIL");
+    }
+
+    try {
+        var bar'int = errors();
+    } catch (RuntimeError e) {
+        print_line(text = "SUCCESS");
+    }
 
     if (cond1) {
         print_line(text = "SUCCESS");

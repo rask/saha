@@ -104,7 +104,7 @@ pub enum StatementKind {
     ///     //
     /// }
     /// ```
-    Try(Box<Block>, Vec<Statement>, Option<Box<Block>>),
+    Try(Box<Block>, Vec<Box<Statement>>, Option<Box<Block>>),
 
     /// Catch statements. Must be after a Try statement in source. Contains two
     /// identifiers: one for the error type, then the variable to use inside
@@ -117,6 +117,13 @@ pub enum StatementKind {
     /// }
     /// ```
     Catch(Identifier, Identifier, Box<Block>),
+
+    /// Raise statement.
+    ///
+    /// ```saha
+    /// raise new SomeError();
+    /// ```
+    Raise(Box<Expression>),
 
     /// Break statement. Used in loops.
     Break,

@@ -180,8 +180,8 @@ impl<'a> AstVisitor<'a> {
 
     /// Visit a curly block.
     ///
-    /// Returns value and whether the block is bailable or not. Breaks and
-    /// returns make the block bailable.
+    /// Returns bailable result, meaning the block can be terminated midway in
+    /// case a break or return statement is encountered.
     fn visit_block(&mut self, block: &Box<Block>) -> BailableAstResult {
         let mut idx = 0;
 
@@ -210,7 +210,9 @@ impl<'a> AstVisitor<'a> {
         return Ok((Value::void(), false));
     }
 
-    /// Visit a statement.
+    /// Visit a statement. Returns a bailable result, meaning breaks and returns
+    /// are propagated up the AST tree to make early block terminations
+    /// possible.
     fn visit_statement(&mut self, statement: &Box<Statement>) -> BailableAstResult {
         let (res, bail) = match &statement.kind {
             StatementKind::Return(expr) => (self.visit_expression(&expr)?, true),
@@ -218,6 +220,7 @@ impl<'a> AstVisitor<'a> {
             StatementKind::Expression(expr) => (self.visit_expression(&expr)?, false),
             StatementKind::If(if_cond, if_block, elifs, else_block) => self.visit_if_statement(if_cond, if_block, elifs, else_block)?,
             StatementKind::Loop(loop_block) => self.visit_loop_statement(loop_block)?,
+            StatementKind::Try(try_block, catches, finally) => self.visit_try_catch_statement(try_block, catches, finally)?,
             StatementKind::Break => (Value::void(), true),
             StatementKind::Continue => (Value::void(), false),
             _ => unimplemented!("{:?}", statement.kind)
@@ -259,7 +262,9 @@ impl<'a> AstVisitor<'a> {
         return Ok(Value::void());
     }
 
-    /// Visit an if-elseif-else statement.
+    /// Visit an if-elseif-else statement. Returns a bailable result, meaning
+    /// return and break statements can terminate the if blocks early where
+    /// needed.
     fn visit_if_statement(
         &mut self,
         if_cond: &Box<Expression>,
@@ -284,15 +289,18 @@ impl<'a> AstVisitor<'a> {
 
         if condition_bool == false {
             let mut should_break = false;
+            let mut bail: bool = false;
 
             if elifs.is_empty() == false {
                 for elifstmt in elifs {
-                    let (should, _, bail) = match &elifstmt.kind {
+                    let (should, _, bail_maybe) = match &elifstmt.kind {
                         StatementKind::If(cond, block, ..) => self.visit_elseif_statement(cond, block)?,
                         _ => unreachable!()
                     };
 
-                    should_break = should == true || bail == true;
+                    should_break = should == true || bail_maybe == true;
+
+                    bail = bail_maybe;
 
                     if should_break {
                         break;
@@ -301,16 +309,18 @@ impl<'a> AstVisitor<'a> {
 
                 if should_break == true {
                     // some elseif matched as true, break out
-                    return Ok((Value::void(), false));
+                    return Ok((Value::void(), bail));
                 }
             }
 
             if else_block.is_some() {
                 let elseb = else_block.clone().unwrap();
-                let (_, _) = self.visit_block(&elseb)?;
+                let (_, bail_maybe) = self.visit_block(&elseb)?;
+
+                bail = bail_maybe;
             }
 
-            return Ok((Value::void(), false));
+            return Ok((Value::void(), bail));
         }
 
         // we matched true for the if so we enter the block
@@ -319,8 +329,15 @@ impl<'a> AstVisitor<'a> {
         return Ok((Value::void(), bail));
     }
 
-    /// Visit an elseif statement. Returns (<was cond true>, <block result value>, <should bail>).
-    fn visit_elseif_statement(&mut self, cond: &Box<Expression>, block: &Box<Block>) -> Result<(bool, Value, bool), RuntimeError> {
+    /// Visit an elseif statement. Returns
+    /// `(<was cond true>, <block result value>, <should bail>)` which is an
+    /// alteration to the bail result, which allows us to check if the elif cond
+    /// was matched as true or not.
+    fn visit_elseif_statement(
+        &mut self,
+        cond: &Box<Expression>,
+        block: &Box<Block>
+    ) -> Result<(bool, Value, bool), RuntimeError> {
         let cond_value = self.visit_expression(cond)?;
         let cond_pos = cond.file_position.clone();
 
@@ -361,6 +378,10 @@ impl<'a> AstVisitor<'a> {
         }
 
         return Ok((loop_val, false));
+    }
+
+    fn visit_try_catch_statement(&mut self, try_block: &Box<Block>, catches: &Vec<Box<Statement>>, finally: &Option<Box<Block>>) -> BailableAstResult {
+        unimplemented!()
     }
 
     /// Visit an expression.
