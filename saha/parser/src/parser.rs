@@ -102,6 +102,7 @@ pub trait ParsesTokens {
             "return" => Token::KwReturn(_f()),
             "new" => Token::KwNew(_f()),
             "for" => Token::KwFor(_f()),
+            "loop" => Token::KwLoop(_f()),
             "in" => Token::KwIn(_f()),
             "if" => Token::KwIf(_f()),
             "elseif" => Token::KwElseif(_f()),

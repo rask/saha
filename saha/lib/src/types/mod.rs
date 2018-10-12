@@ -53,12 +53,12 @@ pub enum SahaType {
     /// Booleans
     Bool,
 
-    /// Names, which should be resolved to other types
-    Name(String),
-
     /// Object instance references, instances are stored in the global symbol
     /// table
     Obj,
+
+    /// Names, which should be resolved to other types
+    Name(String),
 
     /// Internal void type
     Void,

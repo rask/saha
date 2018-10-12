@@ -1,0 +1,97 @@
+function main() int
+{
+    var cond1'bool = true;
+
+    if (cond1) {
+        print_line(text = "SUCCESS");
+    } else {
+        print_line(text = "FAIL");
+    }
+
+    if (false) {
+        print_line(text = "FAIL");
+    } else {
+        print_line(text = "SUCCESS");
+    }
+
+    if (false) {
+        print_line(text = "FAIL");
+    } elseif (true) {
+        print_line(text = "SUCCESS");
+    } else {
+        print_line(text = "FAIL");
+    }
+
+    if (false) {
+        print_line(text = "FAIL");
+    } elseif (false) {
+        print_line(text = "FAIL");
+    } elseif (true) {
+        print_line(text = "SUCCESS");
+    } elseif (true) {
+        print_line(text = "FAIL");
+    } elseif (false) {
+        print_line(text = "FAIL");
+    }
+
+    if (true && true) {
+        print_line(text = "SUCCESS");
+    }
+
+    if (false || true) {
+        print_line(text = "SUCCESS");
+    }
+
+    if (true && false) {
+        print_line(text = "FAIL");
+    } elseif (true || false) {
+        print_line(text = "SUCCESS");
+    }
+
+    if (cond1 == true) {
+        print_line(text = "SUCCESS");
+    }
+
+    if (cond1 == false) {
+        print_line(text = "FAIL");
+    }
+
+    if (3 > 2) {
+        print_line(text = "SUCCESS");
+    }
+
+    if (2 < 3) {
+        print_line(text = "SUCCESS");
+    }
+
+    if ("asd" == "asd") {
+        print_line(text = "SUCCESS");
+    }
+
+    if (2 <= 2) {
+        print_line(text = "SUCCESS");
+    }
+
+    if (1 > 2) {
+        print_line(text = "FAIL");
+    }
+
+    if (2 > 1 && 3 > 1) {
+        print_line(text = "SUCCESS");
+    }
+
+    var counter'int = 0;
+
+    loop {
+        if (counter >= 5) {
+            print_line(text = "BREAK");
+            break;
+        }
+
+        print_line(text = "iter " + counter->toString());
+
+        counter = counter + 1;
+    }
+
+    return 0;
+}

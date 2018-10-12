@@ -119,10 +119,10 @@ pub enum StatementKind {
     Catch(Identifier, Identifier, Box<Block>),
 
     /// Break statement. Used in loops.
-    Break(FilePosition),
+    Break,
 
     /// Continue statement. Used in loops.
-    Continue(FilePosition),
+    Continue,
 }
 
 /// Identifiers, e.g. var names.
@@ -250,6 +250,8 @@ impl BinOp {
             Token::OpLte(..) => BinOpKind::Lte,
             Token::OpGt(..) => BinOpKind::Gt,
             Token::OpGte(..) => BinOpKind::Gte,
+            Token::OpEq(..) => BinOpKind::Eq,
+            Token::OpNeq(..) => BinOpKind::Neq,
             _ => return Err(())
         };
 
@@ -278,6 +280,8 @@ pub enum BinOpKind {
     Gte,
     Lt,
     Lte,
+    Eq,
+    Neq,
     And,
     Or,
 }

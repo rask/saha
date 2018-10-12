@@ -19,7 +19,7 @@ pub fn get_str_methods() -> HashMap<String, (SahaFunctionParamDefs, ValueMethodF
 pub fn get_int_methods() -> HashMap<String, (SahaFunctionParamDefs, ValueMethodFn)> {
     let mut fns: HashMap<String, (SahaFunctionParamDefs, ValueMethodFn)> = HashMap::new();
 
-    fns.insert("to_string".to_string(), (HashMap::new(), int_to_string));
+    fns.insert("toString".to_string(), (HashMap::new(), int_to_string));
 
     return fns;
 }

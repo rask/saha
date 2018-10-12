@@ -1,0 +1,11 @@
+function main() int
+{
+    loop {
+        print_line(text = "BREAK");
+        if (true) {
+            break;
+        }
+    }
+
+    return 0;
+}

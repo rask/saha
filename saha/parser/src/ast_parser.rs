@@ -130,14 +130,21 @@ impl<'a> AstParser<'a> {
             };
         }
 
+        let (_, entrypoint) = self.parse_block(true)?;
+
         return Ok(Ast {
-            entrypoint: self.parse_block(true)?
+            entrypoint: entrypoint
         });
     }
 
-    /// Parse a curly brace block. `is_root` defines whether we are at a function body root or
-    /// whether we are in an inner block, e.g. ifelse block.
-    fn parse_block(&mut self, is_root: bool) -> PR<Box<Block>> {
+    /// Parse a curly brace block. `is_root` defines whether we are at a
+    /// function body root or whether we are in an inner block, e.g. ifelse
+    /// block.
+    ///
+    /// Returns a tuple, the first item contains idents for the types of
+    /// statements the block contains, the other contains the block expression
+    /// itself.
+    fn parse_block(&mut self, is_root: bool) -> PR<(Vec<&str>, Box<Block>)> {
         let block_open_pos: FilePosition;
 
         if is_root == false {
@@ -159,10 +166,18 @@ impl<'a> AstParser<'a> {
             self.consume_next(vec!["}"])?;
         }
 
-        return Ok(Box::new(Block {
+        // let found_kinds: Vec<&str> = statements.iter().map(|stmt| match stmt.kind {
+        //     StatementKind::Return(..) => "return",
+        //     StatementKind::Break => "break",
+        //     _ => "generic"
+        // }).collect();
+
+        let found_kinds = Vec::new(); // FIXME is this needed?
+
+        return Ok((found_kinds, Box::new(Block {
             statements: statements,
             file_position: block_open_pos.to_owned()
-        }));
+        })));
     }
 
     /// Parse statements inside a block.
@@ -181,14 +196,14 @@ impl<'a> AstParser<'a> {
             let statement: Box<Statement> = match self.ntok.unwrap() {
                 Token::Eob | Token::CurlyClose(..) => break,
                 Token::KwVar(..) => self.parse_variable_declaration_statement()?,
-                Token::KwIf(..) => unimplemented!(),
-                Token::KwLoop(..) => unimplemented!(),
+                Token::KwIf(..) => self.parse_if_statement()?,
+                Token::KwLoop(..) => self.parse_loop_statement()?,
                 Token::KwFor(..) => unimplemented!(),
                 Token::KwReturn(..) => self.parse_return_statement()?,
                 Token::KwRaise(..) => unimplemented!(),
                 Token::KwTry(..) => unimplemented!(),
-                Token::KwBreak(..) => unimplemented!(),
-                Token::KwContinue(..) => unimplemented!(),
+                Token::KwBreak(..) => self.parse_break_statement()?,
+                Token::KwContinue(..) => self.parse_continue_statement()?,
                 _ => self.parse_expression_statement()?,
             };
 
@@ -268,6 +283,26 @@ impl<'a> AstParser<'a> {
         return Ok(Box::new(stmt));
     }
 
+    /// Parse a break statement.
+    fn parse_break_statement(&mut self) -> PR<Box<Statement>> {
+        self.consume_next(vec!["break"])?;
+
+        return Ok(Box::new(Statement {
+            kind: StatementKind::Break,
+            file_position: self.ctok.unwrap().get_file_position()
+        }));
+    }
+
+    /// Parse a break statement.
+    fn parse_continue_statement(&mut self) -> PR<Box<Statement>> {
+        self.consume_next(vec!["continue"])?;
+
+        return Ok(Box::new(Statement {
+            kind: StatementKind::Continue,
+            file_position: self.ctok.unwrap().get_file_position()
+        }));
+    }
+
     /// Parse a return statement.
     fn parse_return_statement(&mut self) -> PR<Box<Statement>> {
         self.consume_next(vec!["return"])?;
@@ -290,6 +325,77 @@ impl<'a> AstParser<'a> {
         return Ok(Box::new(Statement {
             file_position: return_pos,
             kind: StatementKind::Return(return_expr)
+        }));
+    }
+
+    /// Parse if-elseif-else statements.
+    fn parse_if_statement(&mut self) -> PR<Box<Statement>> {
+        self.consume_next(vec!["if"])?;
+
+        let if_pos = self.ctok.unwrap().get_file_position();
+
+        self.consume_next(vec!["("])?;
+
+        let if_cond = self.parse_expression(0)?;
+
+        self.consume_next(vec![")"])?;
+
+        let (_, if_block) = self.parse_block(false)?;
+        let mut elifs: Vec<Box<Statement>> = Vec::new();
+        let mut elseblock: Option<Box<Block>> = None;
+
+        loop {
+            match self.ntok.unwrap() {
+                Token::KwElseif(..) => {
+                    self.consume_next(vec!["elseif"])?;
+
+                    let elif_pos = self.ctok.unwrap().get_file_position();
+
+                    self.consume_next(vec!["("])?;
+
+                    let elif_cond = self.parse_expression(0)?;
+
+                    self.consume_next(vec![")"])?;
+
+                    let (_, elif_block) = self.parse_block(false)?;
+
+                    elifs.push(Box::new(Statement {
+                        kind: StatementKind::If(elif_cond, elif_block, Vec::new(), None),
+                        file_position: elif_pos
+                    }));
+                },
+                _ => break
+            };
+        }
+
+        match self.ntok.unwrap() {
+            Token::KwElse(..) => {
+                self.consume_next(vec!["else"])?;
+
+                let (_, e) = self.parse_block(false)?;
+                elseblock = Some(e);
+            }
+            _ => ()
+        };
+
+        let if_statement = Statement {
+            kind: StatementKind::If(if_cond, if_block, elifs, elseblock),
+            file_position: if_pos
+        };
+
+        return Ok(Box::new(if_statement));
+    }
+
+    /// Parse a loop statement.
+    fn parse_loop_statement(&mut self) -> PR<Box<Statement>> {
+        self.consume_next(vec!["loop"])?;
+
+        let loop_pos = self.ctok.unwrap().get_file_position();
+        let (_, loop_block) = self.parse_block(false)?;
+
+        return Ok(Box::new(Statement {
+            kind: StatementKind::Loop(loop_block),
+            file_position: loop_pos
         }));
     }
 
@@ -365,7 +471,7 @@ impl<'a> AstParser<'a> {
     /// Parse a binary operation. First we parse the op and then the RHS
     /// expression. Then we check if we should parse another binop.
     fn parse_binop_expression(&mut self, lhs_expr: Box<Expression>, minimum_op_precedence: i8) -> PR<Box<Expression>> {
-        self.consume_next(vec!["+", "-", "*", "/", "&&", "||", ">", "<", ">=", "<="])?;
+        self.consume_next(vec!["+", "-", "*", "/", "&&", "||", "==", ">", "<", ">=", "<="])?;
 
         let op_token = self.ctok.unwrap();
 

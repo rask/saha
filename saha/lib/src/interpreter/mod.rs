@@ -27,6 +27,7 @@ use crate::{
 };
 
 type AstResult = Result<Value, RuntimeError>;
+type BailableAstResult = Result<(Value, bool), RuntimeError>;
 
 /// AST visitor takes in an AST and visit all expressions and nodes to reduce
 /// them to a single thing: a Saha value.
@@ -170,36 +171,64 @@ impl<'a> AstVisitor<'a> {
 
     /// Start visiting.
     pub fn start(&mut self) -> AstResult {
-        return self.visit_block(&self.ast.entrypoint);
+        let (ast_res, _) = self.visit_block(&self.ast.entrypoint)?;
+
+        // FIXME validate return type
+
+        return Ok(ast_res);
     }
 
     /// Visit a curly block.
-    fn visit_block(&mut self, block: &Box<Block>) -> AstResult {
-        for s in &block.statements {
+    ///
+    /// Returns value and whether the block is bailable or not. Breaks and
+    /// returns make the block bailable.
+    fn visit_block(&mut self, block: &Box<Block>) -> BailableAstResult {
+        let mut idx = 0;
+
+        'stmtloop: for s in &block.statements {
+            idx += 1;
+
+            match s.kind {
+                StatementKind::Continue => return Ok((Value::void(), false)),
+                StatementKind::Break => return Ok((Value::void(), true)),
+                _ => {
+                    println!("{:?}", s);
+                    ()
+                }
+            };
+
+            println!("past the break with {}", idx);
+
             let is_retmatch = match s.kind {
                 StatementKind::Return(..) => true,
                 _ => false
             };
 
-            let block_value = self.visit_statement(&s)?;
+            let (block_value, block_bail) = self.visit_statement(&s)?;
 
-            if is_retmatch {
+            if is_retmatch || block_bail {
                 // encountered a return statement, break out early
-                return Ok(block_value);
+                return Ok((block_value, true));
             }
         }
 
-        return Ok(Value::void());
+        return Ok((Value::void(), false));
     }
 
     /// Visit a statement.
-    fn visit_statement(&mut self, statement: &Box<Statement>) -> AstResult {
-        match &statement.kind {
-            StatementKind::Return(expr) => self.visit_expression(&expr),
-            StatementKind::VarDeclaration(ident, vartype, vardefault) => self.visit_variable_declaration_statement(ident, vartype, vardefault),
-            StatementKind::Expression(expr) => self.visit_expression(&expr),
+    fn visit_statement(&mut self, statement: &Box<Statement>) -> BailableAstResult {
+        let (res, bail) = match &statement.kind {
+            StatementKind::Return(expr) => (self.visit_expression(&expr)?, true),
+            StatementKind::VarDeclaration(ident, vartype, vardefault) => (self.visit_variable_declaration_statement(ident, vartype, vardefault)?, false),
+            StatementKind::Expression(expr) => (self.visit_expression(&expr)?, false),
+            StatementKind::If(if_cond, if_block, elifs, else_block) => self.visit_if_statement(if_cond, if_block, elifs, else_block)?,
+            StatementKind::Loop(loop_block) => self.visit_loop_statement(loop_block)?,
+            StatementKind::Break => (Value::void(), true),
+            StatementKind::Continue => (Value::void(), false),
             _ => unimplemented!("{:?}", statement.kind)
-        }
+        };
+
+        return Ok((res, bail));
     }
 
     /// Visit a variable declaration.
@@ -233,6 +262,110 @@ impl<'a> AstVisitor<'a> {
         self.create_local_ref(refname, (var_type.to_owned(), default_value), refpos)?;
 
         return Ok(Value::void());
+    }
+
+    /// Visit an if-elseif-else statement.
+    fn visit_if_statement(
+        &mut self,
+        if_cond: &Box<Expression>,
+        if_block: &Box<Block>,
+        elifs: &Vec<Box<Statement>>,
+        else_block: &Option<Box<Block>>
+    ) -> BailableAstResult {
+        let cond_value = self.visit_expression(if_cond)?;
+        let cond_pos = if_cond.file_position.clone();
+
+        let condition_bool: bool = match cond_value.kind {
+            SahaType::Bool => cond_value.bool.unwrap(),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Expected boolean value condition, received `{:?}`", cond_value.kind),
+                    Some(cond_pos)
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        if condition_bool == false {
+            let mut should_break = false;
+
+            if elifs.is_empty() == false {
+                for elifstmt in elifs {
+                    let (should, _, bail) = match &elifstmt.kind {
+                        StatementKind::If(cond, block, ..) => self.visit_elseif_statement(cond, block)?,
+                        _ => unreachable!()
+                    };
+
+                    should_break = should == true || bail == true;
+
+                    if should_break {
+                        break;
+                    }
+                }
+
+                if should_break == true {
+                    // some elseif matched as true, break out
+                    return Ok((Value::void(), false));
+                }
+            }
+
+            if else_block.is_some() {
+                let elseb = else_block.clone().unwrap();
+                let (_, _) = self.visit_block(&elseb)?;
+            }
+
+            return Ok((Value::void(), false));
+        }
+
+        // we matched true for the if so we enter the block
+        let (_, bail) = self.visit_block(if_block)?;
+
+        return Ok((Value::void(), bail));
+    }
+
+    /// Visit an elseif statement. Returns (<was cond true>, <block result value>, <should bail>).
+    fn visit_elseif_statement(&mut self, cond: &Box<Expression>, block: &Box<Block>) -> Result<(bool, Value, bool), RuntimeError> {
+        let cond_value = self.visit_expression(cond)?;
+        let cond_pos = cond.file_position.clone();
+
+        let condition_bool: bool = match cond_value.kind {
+            SahaType::Bool => cond_value.bool.unwrap(),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Expected boolean value condition, received `{:?}`", cond_value.kind),
+                    Some(cond_pos)
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        if condition_bool == false {
+            return Ok((false, Value::void(), false));
+        }
+
+        // we matched true for the if so we enter the block
+        let (_, bail) = self.visit_block(block)?;
+
+        return Ok((true, Value::void(), bail));
+    }
+
+    /// Visit a loop statement.
+    fn visit_loop_statement(&mut self, block: &Box<Block>) -> BailableAstResult {
+        let mut loop_val;
+
+        'lloop: loop {
+            let (val, should_break) = self.visit_block(block)?;
+
+            loop_val = val;
+
+            if should_break {
+                break 'lloop;
+            }
+        }
+
+        return Ok((loop_val, false));
     }
 
     /// Visit an expression.
@@ -306,7 +439,9 @@ impl<'a> AstVisitor<'a> {
             BinOpKind::Lt => self.visit_binop_lt(lhs_expr, rhs_expr, &binop.file_position),
             BinOpKind::Lte => self.visit_binop_lte(lhs_expr, rhs_expr, &binop.file_position),
             BinOpKind::And => self.visit_binop_and(lhs_expr, rhs_expr, &binop.file_position),
-            BinOpKind::Or => self.visit_binop_or(lhs_expr, rhs_expr, &binop.file_position)
+            BinOpKind::Or => self.visit_binop_or(lhs_expr, rhs_expr, &binop.file_position),
+            BinOpKind::Eq => self.visit_binop_eq(lhs_expr, rhs_expr, &binop.file_position),
+            BinOpKind::Neq => self.visit_binop_neq(lhs_expr, rhs_expr, &binop.file_position),
         }
     }
 
@@ -433,7 +568,7 @@ impl<'a> AstVisitor<'a> {
 
         let new_val: Value = match (lk, rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() > rhs_value.int.unwrap()),
-            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.int.unwrap() > rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() > rhs_value.float.unwrap()),
             _ => {
                 let err = RuntimeError::new(
                     &format!("Mismatching operands for operation: `{:?} > {:?}`", lkstr, rkstr),
@@ -457,7 +592,7 @@ impl<'a> AstVisitor<'a> {
 
         let new_val: Value = match (lk, rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() >= rhs_value.int.unwrap()),
-            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.int.unwrap() >= rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() >= rhs_value.float.unwrap()),
             _ => {
                 let err = RuntimeError::new(
                     &format!("Mismatching operands for operation: `{:?} >= {:?}`", lkstr, rkstr),
@@ -481,7 +616,7 @@ impl<'a> AstVisitor<'a> {
 
         let new_val: Value = match (lk, rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() < rhs_value.int.unwrap()),
-            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.int.unwrap() < rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() < rhs_value.float.unwrap()),
             _ => {
                 let err = RuntimeError::new(
                     &format!("Mismatching operands for operation: `{:?} < {:?}`", lkstr, rkstr),
@@ -505,10 +640,64 @@ impl<'a> AstVisitor<'a> {
 
         let new_val: Value = match (lk, rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() <= rhs_value.int.unwrap()),
-            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.int.unwrap() <= rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() <= rhs_value.float.unwrap()),
             _ => {
                 let err = RuntimeError::new(
                     &format!("Mismatching operands for operation: `{:?} <= {:?}`", lkstr, rkstr),
+                    Some(op_pos.clone())
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        return Ok(new_val);
+    }
+
+    /// Visit binop expression.
+    fn visit_binop_eq(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
+        let lhs_value = self.visit_expression(lhs)?;
+        let rhs_value: Value = self.visit_expression(rhs)?;
+
+        let (lk, rk) = (lhs_value.kind, rhs_value.kind);
+        let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
+
+        let new_val: Value = match (lk, rk) {
+            (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() == rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() == rhs_value.float.unwrap()),
+            (SahaType::Bool, SahaType::Bool) => Value::bool(lhs_value.bool.unwrap() == rhs_value.bool.unwrap()),
+            (SahaType::Str, SahaType::Str) => Value::bool(lhs_value.str.unwrap() == rhs_value.str.unwrap()),
+            (SahaType::Obj, SahaType::Obj) => Value::bool(lhs_value.obj.unwrap() == rhs_value.obj.unwrap()),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Mismatching operands for operation: `{:?} == {:?}`", lkstr, rkstr),
+                    Some(op_pos.clone())
+                );
+
+                return Err(err.with_type("TypeError"));
+            }
+        };
+
+        return Ok(new_val);
+    }
+
+    /// Visit binop expression.
+    fn visit_binop_neq(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
+        let lhs_value = self.visit_expression(lhs)?;
+        let rhs_value: Value = self.visit_expression(rhs)?;
+
+        let (lk, rk) = (lhs_value.kind, rhs_value.kind);
+        let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
+
+        let new_val: Value = match (lk, rk) {
+            (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() != rhs_value.int.unwrap()),
+            (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() != rhs_value.float.unwrap()),
+            (SahaType::Bool, SahaType::Bool) => Value::bool(lhs_value.bool.unwrap() != rhs_value.bool.unwrap()),
+            (SahaType::Str, SahaType::Str) => Value::bool(lhs_value.str.unwrap() != rhs_value.str.unwrap()),
+            (SahaType::Obj, SahaType::Obj) => Value::bool(lhs_value.obj.unwrap() != rhs_value.obj.unwrap()),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Mismatching operands for operation: `{:?} != {:?}`", lkstr, rkstr),
                     Some(op_pos.clone())
                 );
 
