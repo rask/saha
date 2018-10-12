@@ -191,13 +191,8 @@ impl<'a> AstVisitor<'a> {
             match s.kind {
                 StatementKind::Continue => return Ok((Value::void(), false)),
                 StatementKind::Break => return Ok((Value::void(), true)),
-                _ => {
-                    println!("{:?}", s);
-                    ()
-                }
+                _ => ()
             };
-
-            println!("past the break with {}", idx);
 
             let is_retmatch = match s.kind {
                 StatementKind::Return(..) => true,
