@@ -124,7 +124,23 @@ impl SahaCallable for CoreFunction {
     fn call(&self, args: SahaFunctionArguments, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(&args, &call_source_position)?;
 
-        return (self.fn_ref)(args);
+        let res = (self.fn_ref)(args.clone())?;
+
+        if res.kind != self.return_type {
+            let err = RuntimeError::new(
+                &format!(
+                    "Return type mismatch for `{}`, expected `{:?}` but received `{:?}`",
+                    self.name,
+                    self.return_type,
+                    res.kind
+                ),
+                call_source_position
+            );
+
+            return Err(err.with_type("ValueError"));
+        }
+
+        return Ok(res);
     }
 
     fn get_parameters(&self) -> SahaFunctionParamDefs {

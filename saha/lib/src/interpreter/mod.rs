@@ -220,6 +220,7 @@ impl<'a> AstVisitor<'a> {
             StatementKind::Expression(expr) => (self.visit_expression(&expr)?, false),
             StatementKind::If(if_cond, if_block, elifs, else_block) => self.visit_if_statement(if_cond, if_block, elifs, else_block)?,
             StatementKind::Loop(loop_block) => self.visit_loop_statement(loop_block)?,
+            StatementKind::Raise(expr) => self.visit_raise_statement(expr)?,
             StatementKind::Try(try_block, catches, finally) => self.visit_try_catch_statement(try_block, catches, finally)?,
             StatementKind::Break => (Value::void(), true),
             StatementKind::Continue => (Value::void(), false),
@@ -260,6 +261,23 @@ impl<'a> AstVisitor<'a> {
         self.create_local_ref(refname, (var_type.to_owned(), default_value), refpos)?;
 
         return Ok(Value::void());
+    }
+
+    /// Visit a raise statement that raises errors.
+    fn visit_raise_statement(&mut self, expr: &Box<Expression>) -> BailableAstResult {
+        let raisable = self.visit_expression(expr)?;
+
+        match raisable.kind {
+            SahaType::Err => Err(RuntimeError::from_error_value(&raisable, &expr.file_position)),
+            _ => {
+                let err = RuntimeError::new(
+                    &format!("Attempted to raise a non-error type `{:?}`", raisable.kind),
+                    Some(expr.file_position.clone())
+                );
+
+                Err(err)
+            }
+        }
     }
 
     /// Visit an if-elseif-else statement. Returns a bailable result, meaning
@@ -381,6 +399,32 @@ impl<'a> AstVisitor<'a> {
     }
 
     fn visit_try_catch_statement(&mut self, try_block: &Box<Block>, catches: &Vec<Box<Statement>>, finally: &Option<Box<Block>>) -> BailableAstResult {
+        let try_result = self.visit_block(try_block);
+
+        if try_result.is_ok() {
+            // no issues, return without attempting to catch anything
+            return Ok(try_result.ok().unwrap());
+        }
+
+        let mut was_caught = false;
+
+        for c_stmt in catches {
+            let (catch_type, catch_ident, catch_block) = match &c_stmt.kind {
+                StatementKind::Catch(c, i, b) => (c.clone(), i.clone(), b),
+                _ => unreachable!()
+            };
+
+            unimplemented!()
+        }
+
+        if finally.is_some() {
+
+        }
+
+        if was_caught == false {
+            return Err(try_result.err().unwrap());
+        }
+
         unimplemented!()
     }
 
@@ -424,9 +468,7 @@ impl<'a> AstVisitor<'a> {
                 access_file_pos: &Some(property.file_position)
             };
 
-            let result_value = inst_lockable.lock().unwrap().mutate_property(access, value)?;
-
-            return Ok(result_value);
+            return inst_lockable.lock().unwrap().mutate_property(access, value);
         }
     }
 
@@ -882,7 +924,6 @@ impl<'a> AstVisitor<'a> {
 
     /// Access an object property and get the value it contains.
     fn access_object_property(&mut self, obj: Value, access_kind: AccessKind, property_name: Identifier) -> AstResult {
-        let result_value: Value;
         let inst_lockable: Arc<Mutex<Box<dyn SahaObject>>>;
 
         match obj.kind {
@@ -904,8 +945,6 @@ impl<'a> AstVisitor<'a> {
             _ => false
         };
 
-        let instref_ctx = self.self_ref;
-
         let access = AccessParams {
             is_static_access: is_static_access,
             member_name: &property_name.identifier,
@@ -913,9 +952,7 @@ impl<'a> AstVisitor<'a> {
             access_file_pos: &Some(property_name.file_position)
         };
 
-        result_value = inst_lockable.lock().unwrap().access_property(access)?;
-
-        return Ok(result_value);
+        return inst_lockable.lock().unwrap().access_property(access);
     }
 
     /// Resolve an identifier name to a local ref table value.

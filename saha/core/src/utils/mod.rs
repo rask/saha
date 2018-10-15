@@ -2,14 +2,17 @@
 
 use std::collections::HashMap;
 
-use saha_lib::types::{
-    Value, SahaType,
-    functions::{
-        SahaFunctionParamDefs,
-        SahaFunctionArguments,
-        FunctionParameter,
-        SahaCallResult,
-        CoreFunction
+use saha_lib::{
+    errors::RuntimeError,
+    types::{
+        Value, SahaType,
+        functions::{
+            SahaFunctionParamDefs,
+            SahaFunctionArguments,
+            FunctionParameter,
+            SahaCallResult,
+            CoreFunction
+        }
     }
 };
 

@@ -7,7 +7,11 @@
 //! the language.
 
 use std::fmt::Debug;
-use crate::source::files::FilePosition;
+
+use crate::{
+    types::Value,
+    source::files::FilePosition
+};
 
 /// Error trait
 ///
@@ -91,6 +95,10 @@ impl RuntimeError {
             file_position: self.file_position.to_owned(),
             saha_error_type: with_type.to_string()
         };
+    }
+
+    pub fn from_error_value(err_val: &Value, position: &FilePosition) -> Self {
+        unimplemented!()
     }
 }
 
