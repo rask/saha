@@ -230,7 +230,7 @@ pub enum ExpressionKind {
 
     /// Newup a class. First is the class name, second is the constructor args,
     /// which are alike function call args.
-    NewInstance(Identifier, Box<Expression>)
+    NewInstance(Identifier, Box<Expression>, HashMap<char, SahaType>),
 }
 
 /// Binary operation.

@@ -1,0 +1,23 @@
+class Foobar<T>
+{
+    pub prop asdf'T;
+}
+
+function main() int
+{
+    var fb'Foobar<T: int> = new Foobar<T: int>(asdf = 2);
+    var alist'List<T: int> = new List<T: int>();
+
+    fb->asdf = 3;
+
+    print_line(text = fb->asdf->toString());
+
+    alist->push(value = 1);
+    alist->push(value = 2);
+
+    var counts'str = alist->count()->toString();
+
+    print_line(text = counts);
+
+    return 0;
+}

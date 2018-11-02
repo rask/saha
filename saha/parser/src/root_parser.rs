@@ -177,12 +177,12 @@ impl<'a> RootParser<'a> {
 
         let fn_parameter_definitions: SahaFunctionParamDefs = match self.ntok.unwrap() {
             Token::ParensClose(..) => HashMap::new(),
-            _ => self.parse_function_parameter_definitions()?
+            _ => self.parse_function_parameter_definitions(false)?
         };
 
         self.consume_next(vec![")"])?;
 
-        let return_type: SahaType = self.parse_function_return_type()?;
+        let return_type: SahaType = self.parse_function_return_type(false)?;
 
         // If there was a return type we need to consume the body open curly here, otherwise it has
         // been consumed already
@@ -212,7 +212,7 @@ impl<'a> RootParser<'a> {
     }
 
     /// Parse function declaration parameter definitions.
-    fn parse_function_parameter_definitions(&mut self) -> PR<SahaFunctionParamDefs> {
+    fn parse_function_parameter_definitions(&mut self, parse_param_types: bool) -> PR<SahaFunctionParamDefs> {
         let mut param_defs: SahaFunctionParamDefs = HashMap::new();
 
         loop {
@@ -241,7 +241,13 @@ impl<'a> RootParser<'a> {
                 Token::TypeString(..) => SahaType::Str,
                 Token::TypeInteger(..) => SahaType::Int,
                 Token::TypeFloat(..) => SahaType::Float,
-                Token::Name(_, n, _) => SahaType::Name(n.to_owned()),
+                Token::Name(_, n, _) => {
+                    if parse_param_types && self.validate_paramtype_name(&n) {
+                        SahaType::TypeParam(n.to_owned().chars().nth(0).unwrap())
+                    } else {
+                        SahaType::Name(n.to_owned())
+                    }
+                },
                 _ => unreachable!()
             };
 
@@ -305,11 +311,17 @@ impl<'a> RootParser<'a> {
     }
 
     /// Parse a function return type.
-    fn parse_function_return_type(&mut self) -> PR<SahaType> {
+    fn parse_function_return_type(&mut self, parse_param_types: bool) -> PR<SahaType> {
         self.consume_next(vec!["name", "typestring", "typeboolean", "typeinteger", "typefloat", "{"])?;
 
         match self.ctok.unwrap() {
-            Token::Name(_, alias, _) => Ok(SahaType::Name(alias.to_owned())),
+            Token::Name(_, alias, _) => {
+                if parse_param_types && self.validate_paramtype_name(&alias) {
+                    Ok(SahaType::TypeParam(alias.to_owned().chars().nth(0).unwrap()))
+                } else {
+                    Ok(SahaType::Name(alias.to_owned()))
+                }
+            },
             Token::TypeBoolean(..) => Ok(SahaType::Bool),
             Token::TypeString(..) => Ok(SahaType::Str),
             Token::TypeInteger(..) => Ok(SahaType::Int),
@@ -474,6 +486,14 @@ impl<'a> RootParser<'a> {
             ));
         }
 
+        let paramtype_defs: HashMap<char, SahaType>;
+
+        if let Token::OpLt(..) = self.ntok.unwrap() {
+            paramtype_defs = self.parse_paramtype_defs()?;
+        } else {
+            paramtype_defs = HashMap::new();
+        }
+
         self.consume_next(vec!["{"])?;
 
         let (property_definitions, method_definitions, implements) = self.parse_class_body()?;
@@ -486,12 +506,77 @@ impl<'a> RootParser<'a> {
             source_position: cname_pos.to_owned(),
             methods: method_definitions,
             properties: property_definitions,
-            implements: implements
+            implements: implements,
+            type_params: paramtype_defs
         };
 
         self.parse_table.classes.insert(cname.to_owned(), class_def);
 
         return self.parse_root();
+    }
+
+    /// Validate a parameter type name (should be a single uppercase char).
+    fn validate_paramtype_name(&self, name: &String) -> bool {
+        if name.len() != 1 {
+            return false;
+        }
+
+        let acceptable = [
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+        ];
+
+        return acceptable.contains(&name.chars().nth(0).unwrap());
+    }
+
+    /// Parse parameter type definitions for a class.
+    fn parse_paramtype_defs(&mut self) -> PR<HashMap<char, SahaType>> {
+        let mut ptypes: HashMap<char, SahaType> = HashMap::new();
+
+        self.consume_next(vec!["<"])?;
+
+        let ptype_def_position = self.ctok.unwrap().get_file_position();
+
+        loop {
+            self.consume_next(vec!["name"])?;
+
+            let (type_char, type_pos) = match self.ctok.unwrap() {
+                Token::Name(pos, _, name) => (name, pos),
+                _ => unreachable!()
+            };
+
+            if self.validate_paramtype_name(&type_char) == false {
+                return Err(ParseError::new(
+                    &format!("Invalid type parameter name `{}`", type_char),
+                    Some(type_pos.clone())
+                ));
+            }
+
+            let type_char = type_char.chars().nth(0).unwrap();
+
+            if ptypes.contains_key(&type_char) {
+                return Err(ParseError::new(
+                    &format!("Cannot redeclare parameter type `{}`", type_char),
+                    Some(type_pos.clone())
+                ));
+            }
+
+            ptypes.insert(type_char, SahaType::Void);
+
+            match self.ntok.unwrap() {
+                Token::OpGt(..) => break,
+                Token::Comma(..) => {
+                    self.consume_next(vec![","])?;
+
+                    continue
+                },
+                _ => continue
+            };
+        }
+
+        self.consume_next(vec![">"])?;
+
+        return Ok(ptypes);
     }
 
     /// Parse the contents of a class declaration. Methods, props, implements.
@@ -695,7 +780,13 @@ impl<'a> RootParser<'a> {
             Token::TypeString(..) => SahaType::Str,
             Token::TypeInteger(..) => SahaType::Int,
             Token::TypeFloat(..) => SahaType::Float,
-            Token::Name(_, alias, _) => SahaType::Name(alias.to_owned()),
+            Token::Name(_, alias, _) => {
+                if self.validate_paramtype_name(&alias) == false {
+                    SahaType::Name(alias.to_owned())
+                } else {
+                    SahaType::TypeParam(alias.to_owned().chars().nth(0).unwrap())
+                }
+            },
             _ => unreachable!()
         };
 
@@ -745,12 +836,12 @@ impl<'a> RootParser<'a> {
 
         let fn_parameter_definitions: SahaFunctionParamDefs = match self.ntok.unwrap() {
             Token::ParensClose(..) => HashMap::new(),
-            _ => self.parse_function_parameter_definitions()?
+            _ => self.parse_function_parameter_definitions(true)?
         };
 
         self.consume_next(vec![")"])?;
 
-        let return_type: SahaType = self.parse_function_return_type()?;
+        let return_type: SahaType = self.parse_function_return_type(true)?;
 
         // If there was a return type we need to consume the body open curly here, otherwise it has
         // been consumed already
@@ -854,7 +945,7 @@ impl<'a> RootParser<'a> {
 
                     let param_defs: SahaFunctionParamDefs = match self.ntok.unwrap() {
                         Token::ParensClose(..) => HashMap::new(),
-                        _ => self.parse_function_parameter_definitions()?
+                        _ => self.parse_function_parameter_definitions(false)?
                     };
 
                     self.consume_next(vec![")"])?;

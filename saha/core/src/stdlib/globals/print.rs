@@ -1,5 +1,3 @@
-///! Saha stdlib globals
-
 use std::collections::HashMap;
 
 use saha_lib::{
@@ -47,6 +45,32 @@ pub fn get_saha_functions() -> Vec<(String, CoreFunction)> {
         print_line
     ));
 
+    fns.push(create_core_function(
+        "print_err",
+        vec![
+            ("text", FunctionParameter {
+                name: "text".to_string(),
+                param_type: SahaType::Str,
+                default: Value::void()
+            })
+        ],
+        SahaType::Void,
+        print_err
+    ));
+
+    fns.push(create_core_function(
+        "print_err_line",
+        vec![
+            ("text", FunctionParameter {
+                name: "text".to_string(),
+                param_type: SahaType::Str,
+                default: Value::void()
+            })
+        ],
+        SahaType::Void,
+        print_err_line
+    ));
+
     return fns;
 }
 
@@ -62,6 +86,22 @@ fn print_line(args: SahaFunctionArguments) -> SahaCallResult {
     let to_print = args.get("text").unwrap().clone().str.unwrap();
 
     println!("{}", to_print);
+
+    return Ok(Value::void());
+}
+
+fn print_err(args: SahaFunctionArguments) -> SahaCallResult {
+    let to_print = args.get("text").unwrap().clone().str.unwrap();
+
+    eprint!("{}", to_print);
+
+    return Ok(Value::void());
+}
+
+fn print_err_line(args: SahaFunctionArguments) -> SahaCallResult {
+    let to_print = args.get("text").unwrap().clone().str.unwrap();
+
+    eprintln!("{}", to_print);
 
     return Ok(Value::void());
 }

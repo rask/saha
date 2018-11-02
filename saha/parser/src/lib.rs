@@ -177,7 +177,7 @@ fn populate_classes(parse_table: &ParseTable) -> Result<(), ParseError> {
             fqname: c.name.clone(),
             properties: props,
             implements: c.implements.clone(),
-            type_params: HashMap::new()
+            type_params: c.type_params
         };
 
         st.classes.insert(cname.clone(), cdef);

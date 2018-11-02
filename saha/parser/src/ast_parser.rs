@@ -251,7 +251,11 @@ impl<'a> AstParser<'a> {
             _ => unreachable!()
         };
 
-        // if we don't have an assigned we return an uninited variable
+        if let Token::OpLt(..) = self.ntok.unwrap() {
+            let paramtypes = self.parse_new_instance_type_params()?;
+        }
+
+        // if we don't have an assignment we return an uninited variable
         if let Token::EndStatement(..) = self.ntok.unwrap() {
             let stmt = Statement {
                 file_position: statement_pos.to_owned(),
@@ -501,6 +505,13 @@ impl<'a> AstParser<'a> {
         let ntok: &Token = self.ntok.unwrap_or(&Token::Eob);
         let next_precedence = ntok.get_precedence();
 
+        match ntok {
+            Token::ObjectAccess(..) | Token::StaticAccess(..) => {
+                return self.parse_generic_object_access(expression);
+            },
+            _ => {}
+        };
+
         if next_precedence < minimum_op_precedence {
             // non-operator or lesser precedence
             return Ok(expression);
@@ -561,6 +572,28 @@ impl<'a> AstParser<'a> {
             file_position: identpath.file_position.clone(),
             kind: ExpressionKind::Assignment(identpath, value_expr)
         }));
+    }
+
+    /// Parse a generic expression where some member of something is being
+    /// accessed.
+    fn parse_generic_object_access(&mut self, lhs_expr: Box<Expression>) -> PR<Box<Expression>> {
+        self.consume_next(vec!["->", "::"])?;
+
+        let akind = match self.ctok.unwrap() {
+            Token::ObjectAccess(..) => AccessKind::Instance,
+            Token::StaticAccess(..) => AccessKind::Static,
+            _ => unreachable!()
+        };
+
+        let epos = self.ctok.unwrap().get_file_position();
+        let rhs_expr = self.parse_expression(0)?;
+
+        let expr = Expression {
+            file_position: epos,
+            kind: ExpressionKind::ObjectAccess(lhs_expr, akind, rhs_expr)
+        };
+
+        return Ok(Box::new(expr));
     }
 
     /// Parse a binary operation. First we parse the op and then the RHS
@@ -734,15 +767,21 @@ impl<'a> AstParser<'a> {
 
         loop {
             match self.ntok.unwrap() {
-                Token::ParensClose(..) => break,
+                Token::ParensClose(..) => {
+                    break
+                },
                 Token::Comma(..) => {
                     self.consume_next(vec![","])?;
-                }
+
+                    continue
+                },
                 _ => {
                     args.push(self.parse_callable_arg()?);
+
+                    continue
                 }
             }
-        }
+        };
 
         let args_expr = Expression {
             file_position: args_pos,
@@ -757,6 +796,7 @@ impl<'a> AstParser<'a> {
     /// FIXME: allow parsing a single arg without a name, in case we're calling
     /// a callable that receives a single parameter
     fn parse_callable_arg(&mut self) -> PR<Box<Expression>> {
+        println!("parsing a single arg at `{:?}`", self.ctok.unwrap().get_file_position());
         self.consume_next(vec!["name"])?;
 
         let argname: String = String::new();
@@ -792,6 +832,14 @@ impl<'a> AstParser<'a> {
             _ => unreachable!()
         };
 
+        let typeparams: HashMap<char, SahaType>;
+
+        if let Token::OpLt(..) = self.ntok.unwrap() {
+            typeparams = self.parse_new_instance_type_params()?;
+        } else {
+            typeparams = HashMap::new();
+        }
+
         self.consume_next(vec!["("])?;
 
         let newup_args = self.parse_callable_args()?;
@@ -805,9 +853,90 @@ impl<'a> AstParser<'a> {
                     file_position: cname_pos.clone(),
                     identifier: cname.clone()
                 },
-                newup_args
+                newup_args,
+                typeparams
             )
         }));
+    }
+
+    /// Validate a parameter type name (should be a single uppercase char).
+    fn validate_paramtype_name(&self, name: &String) -> bool {
+        if name.len() != 1 {
+            return false;
+        }
+
+        let acceptable = [
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+        ];
+
+        return acceptable.contains(&name.chars().nth(0).unwrap());
+    }
+
+    /// Parse instance newup type param declarations.
+    fn parse_new_instance_type_params(&mut self) -> PR<HashMap<char, SahaType>> {
+        let mut tparams: HashMap<char, SahaType> = HashMap::new();
+
+        self.consume_next(vec!["<"])?;
+
+        let tparams_pos = self.ctok.unwrap().get_file_position();
+
+        loop {
+            self.consume_next(vec!["name"])?;
+
+            let (type_char, type_pos) = match self.ctok.unwrap() {
+                Token::Name(pos, _, name) => (name, pos),
+                _ => unreachable!()
+            };
+
+            if self.validate_paramtype_name(&type_char) == false {
+                return Err(ParseError::new(
+                    &format!("Invalid type parameter name `{}`", type_char),
+                    Some(type_pos.clone())
+                ));
+            }
+
+            let type_char = type_char.chars().nth(0).unwrap();
+
+            if tparams.contains_key(&type_char) {
+                return Err(ParseError::new(
+                    &format!("Cannot redeclare parameter type `{}`", type_char),
+                    Some(type_pos.clone())
+                ));
+            }
+
+            self.consume_next(vec![":"])?;
+
+            self.consume_next(vec!["name", "str", "int", "float", "bool"])?;
+
+            let (typepos, typetype) = match self.ctok.unwrap() {
+                Token::Name(pos, n, _) => (pos, SahaType::Name(n.to_string())),
+                Token::TypeInteger(pos) => (pos, SahaType::Int),
+                Token::TypeFloat(pos) => (pos, SahaType::Float),
+                Token::TypeString(pos) => (pos, SahaType::Str),
+                Token::TypeBoolean(pos) => (pos, SahaType::Bool),
+                _ => unreachable!()
+            };
+
+            tparams.insert(type_char, typetype);
+
+            match self.ntok.unwrap() {
+                Token::OpGt(..) => {
+                    break
+                },
+                Token::Comma(..) => {
+                    self.consume_next(vec![","])?;
+                    continue
+                },
+                _ => {
+                    continue
+                }
+            };
+        }
+
+        self.consume_next(vec![">"])?;
+
+        return Ok(tparams);
     }
 }
 

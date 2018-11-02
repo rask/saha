@@ -437,7 +437,7 @@ impl<'a> AstVisitor<'a> {
             ExpressionKind::Assignment(identpath, expr) => self.visit_assignment(identpath, expr),
             ExpressionKind::FunctionCall(identpath, call_args) => self.visit_callable_call(identpath, call_args),
             ExpressionKind::IdentPath(..) => self.resolve_ident_path_to_value(&expression),
-            ExpressionKind::NewInstance(ident, args) => self.visit_instance_newup(ident, args),
+            ExpressionKind::NewInstance(ident, args, typeparams) => self.visit_instance_newup(ident, args, typeparams),
             _ => unimplemented!("{:?}", expression.kind)
         }
     }
@@ -1056,14 +1056,14 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Visit a newup expression.
-    fn visit_instance_newup(&mut self, ident: &Identifier, args: &Box<Expression>) -> AstResult {
+    fn visit_instance_newup(&mut self, ident: &Identifier, args: &Box<Expression>, typeparams: &HashMap<char, SahaType>) -> AstResult {
         let newup_args: SahaFunctionArguments = self.parse_callable_args(args)?;
         let inst_val: Value;
 
         {
             let mut st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
 
-            inst_val = st.create_object_instance(ident.identifier.clone(), newup_args, &Some(ident.file_position.clone()))?;
+            inst_val = st.create_object_instance(ident.identifier.clone(), newup_args, typeparams, &Some(ident.file_position.clone()))?;
         }
 
         return Ok(inst_val);

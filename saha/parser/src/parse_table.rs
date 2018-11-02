@@ -52,6 +52,7 @@ pub struct ClassDefinition {
     pub properties: HashMap<String, PropertyDefinition>,
     pub methods: HashMap<String, FunctionDefinition>,
     pub implements: Vec<String>,
+    pub type_params: HashMap<char, SahaType>
 }
 
 /// Behavior definitions, used to build actual behaviors.

@@ -16,7 +16,7 @@ use crate::{
     errors::{Error, ParseError, RuntimeError},
     source::files::FilePosition,
     types::{
-        Value,
+        Value, SahaType,
         functions::{SahaCallable, SahaFunctionArguments},
         objects::{SahaObject, ClassDefinition, BehaviorDefinition}
     }
@@ -53,6 +53,10 @@ pub struct SymbolTable {
     /// instances (data) and logic that modifies instances.
     pub classes: HashMap<String, ClassDefinition>,
 
+    /// Collection of core-defined class names and references to Rust functions
+    /// to create new instances of them.
+    pub core_classes: HashMap<String, fn(insref: InstRef, args: SahaFunctionArguments, param_types: HashMap<char, SahaType>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>>,
+
     /// Class methods. These are the same as functions, but the naming
     /// convention goes as such:
     ///
@@ -86,6 +90,7 @@ impl SymbolTable {
             functions: HashMap::new(),
             behaviors: HashMap::new(),
             classes: HashMap::new(),
+            core_classes: HashMap::new(),
             methods: HashMap::new(),
             instances: HashMap::new(),
         };
@@ -114,8 +119,50 @@ impl SymbolTable {
 
     /// Insert a new object instance to the symbol table, and then return the
     /// instref value.
-    pub fn create_object_instance(&mut self, class_name: String, args: SahaFunctionArguments, create_pos: &Option<FilePosition>) -> Result<Value, RuntimeError> {
+    pub fn create_object_instance(
+        &mut self,
+        class_name: String,
+        args: SahaFunctionArguments,
+        type_params: &HashMap<char, SahaType>,
+        create_pos: &Option<FilePosition>
+    ) -> Result<Value, RuntimeError> {
         let def: Option<&ClassDefinition> = self.classes.get(&class_name);
+
+        if def.is_none() {
+            // no userland definition found, attempt newup for a core instance
+            let core_inst = self.create_core_object_instance(class_name, args, type_params, create_pos);
+
+            if core_inst.is_err() {
+                return Err(core_inst.err().unwrap());
+            } else {
+                let core_inst = core_inst.ok().unwrap();
+
+                return Ok(Value::obj(core_inst));
+            }
+        }
+
+        let def = def.unwrap();
+
+        let instref = Self::get_new_uuid_bytes();
+
+        let inst: Box<dyn SahaObject> = def.create_new_instance(instref, args, type_params, create_pos)?;
+
+        self.instances.insert(instref, Arc::new(Mutex::new(inst)));
+
+        return Ok(Value::obj(instref));
+    }
+
+    /// Create a core object instance, e.g. List, Dictionary, etc.
+    fn create_core_object_instance(
+        &mut self,
+        class_name: String,
+        args: SahaFunctionArguments,
+        type_params: &HashMap<char, SahaType>,
+        create_pos: &Option<FilePosition>
+    ) -> Result<InstRef, RuntimeError> {
+        let instref = Self::get_new_uuid_bytes();
+
+        let def = self.core_classes.get(&class_name);
 
         if def.is_none() {
             let err = RuntimeError::new(&format!("Cannot create instance of unknown class `{}`", class_name), create_pos.to_owned());
@@ -123,15 +170,16 @@ impl SymbolTable {
             return Err(err.with_type("TypeError"));
         }
 
-        let def = def.unwrap();
+        let inst_result: Result<Box<dyn SahaObject>, RuntimeError> = (def.unwrap())(instref, args, type_params.clone(), create_pos.clone());
 
-        let instref = Self::get_new_uuid_bytes();
+        match inst_result {
+            Ok(inst) => {
+                self.instances.insert(instref, Arc::new(Mutex::new(inst)));
 
-        let inst: Box<dyn SahaObject> = def.create_new_instance(instref, args, HashMap::new(), create_pos)?;
-
-        self.instances.insert(instref, Arc::new(Mutex::new(inst)));
-
-        return Ok(Value::obj(instref));
+                Ok(instref)
+            },
+            Err(e) => Err(e)
+        }
     }
 
     /// Get a new random UUID types type instance reference.

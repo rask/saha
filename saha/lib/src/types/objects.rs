@@ -156,13 +156,65 @@ pub struct ClassDefinition {
 }
 
 impl ClassDefinition {
+    /// Get parsed class properties, where type parameters have been normalized.
+    fn get_parsed_properties(
+        &self,
+        type_params: &HashMap<char, SahaType>,
+        create_pos: &Option<FilePosition>
+    ) -> Result<ObjProperties, RuntimeError> {
+        if self.type_params.len() != type_params.len() {
+            return Err(
+                RuntimeError::new(
+                    &format!("Class `{}` expects {} type parameters, {} given", self.fqname, self.type_params.len(), type_params.len()),
+                    create_pos.clone()
+                )
+            );
+        }
+
+        let mut new_props: ObjProperties = HashMap::new();
+
+        for (pname, p) in &self.properties {
+            let new_p = match p.prop_type {
+                SahaType::TypeParam(n) => {
+                    let mut np = p.clone();
+
+                    if type_params.contains_key(&n) == false {
+                        return Err(
+                            RuntimeError::new(
+                                &format!("Class `{}` requires type parameter {} to be defined", self.fqname, n),
+                                create_pos.clone()
+                            )
+                        );
+                    }
+
+                    np.prop_type = type_params.get(&n).unwrap().clone();
+
+                    np
+                },
+                _ => p.clone()
+            };
+
+            new_props.insert(pname.clone(), new_p);
+        }
+
+        return Ok(new_props);
+    }
+
     /// Create a new instance object from this definition blueprint.
-    pub fn create_new_instance(&self, inst_ref: InstRef, args: SahaFunctionArguments, typeparams: HashMap<char, SahaType>, create_pos: &Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
-        self.properties.validate_args(&args, create_pos)?;
+    pub fn create_new_instance(
+        &self,
+        inst_ref: InstRef,
+        args: SahaFunctionArguments,
+        typeparams: &HashMap<char, SahaType>,
+        create_pos: &Option<FilePosition>
+    ) -> Result<Box<dyn SahaObject>, RuntimeError> {
+        let mut parsed_properties = self.get_parsed_properties(typeparams, create_pos)?;
+
+        parsed_properties.validate_args(&args, create_pos)?;
 
         let mut inst_props: ObjProperties = HashMap::new();
 
-        for (pname, p) in &self.properties {
+        for (pname, p) in &parsed_properties {
             if args.contains_key(pname) {
                 let arg_val: Value = args.get(pname).unwrap().clone();
 
@@ -190,7 +242,7 @@ impl ClassDefinition {
             properties: inst_props,
             implements: self.implements.clone(),
             inst_ref: inst_ref,
-            type_params: typeparams
+            type_params: typeparams.clone()
         }));
     }
 }
