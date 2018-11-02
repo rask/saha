@@ -45,10 +45,12 @@ pub trait SahaObject: Send {
     /// Get a lockable Arc ref to a method.
     fn get_method_ref(&mut self, method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError>;
 
-    /// Call an object member, e.g. a method. We denote whether this is a static
-    /// call, and we pass in an optional instance reference of the calling
-    /// context (which is used to determine if this is a `self` call and allow
-    /// access to private members).
+    /// Get type parameter definitions (i.e. generics definitions).
+    fn get_type_params(&self) -> HashMap<char, SahaType>;
+
+    /// Call an object member, e.g. a method. We denote whether this is a static call, and we pass
+    /// in an optional instance reference of the calling context (which is used to determine if this
+    /// is a `self` call and allow access to private members).
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult;
 
     /// Access (get) a member property. Determine static access and `self`
@@ -149,12 +151,13 @@ pub struct ClassDefinition {
     pub name: String,
     pub fqname: String,
     pub properties: ObjProperties,
-    pub implements: Vec<String>
+    pub implements: Vec<String>,
+    pub type_params: HashMap<char, SahaType>
 }
 
 impl ClassDefinition {
     /// Create a new instance object from this definition blueprint.
-    pub fn create_new_instance(&self, inst_ref: InstRef, args: SahaFunctionArguments, create_pos: &Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
+    pub fn create_new_instance(&self, inst_ref: InstRef, args: SahaFunctionArguments, typeparams: HashMap<char, SahaType>, create_pos: &Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
         self.properties.validate_args(&args, create_pos)?;
 
         let mut inst_props: ObjProperties = HashMap::new();
@@ -186,7 +189,8 @@ impl ClassDefinition {
             fq_class_name: self.fqname.clone(),
             properties: inst_props,
             implements: self.implements.clone(),
-            inst_ref: inst_ref
+            inst_ref: inst_ref,
+            type_params: typeparams
         }));
     }
 }
@@ -212,7 +216,8 @@ pub struct UserInstance {
     fq_class_name: String,
     inst_ref: InstRef,
     implements: Vec<String>,
-    properties: HashMap<String, Property>
+    properties: HashMap<String, Property>,
+    type_params: HashMap<char, SahaType>
 }
 
 impl SahaObject for UserInstance {
@@ -251,6 +256,10 @@ impl SahaObject for UserInstance {
 
         // clone arc ref and return it
         return Ok(method_callable);
+    }
+
+    fn get_type_params(&self) -> HashMap<char, SahaType> {
+        return self.type_params.clone();
     }
 
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {

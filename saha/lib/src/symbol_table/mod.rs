@@ -127,7 +127,7 @@ impl SymbolTable {
 
         let instref = Self::get_new_uuid_bytes();
 
-        let inst: Box<dyn SahaObject> = def.create_new_instance(instref, args, create_pos)?;
+        let inst: Box<dyn SahaObject> = def.create_new_instance(instref, args, HashMap::new(), create_pos)?;
 
         self.instances.insert(instref, Arc::new(Mutex::new(inst)));
 

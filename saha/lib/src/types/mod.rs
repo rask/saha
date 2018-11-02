@@ -63,6 +63,9 @@ pub enum SahaType {
     /// Names, which should be resolved to other types
     Name(String),
 
+    /// Type parameter, consisting of a single uppercase character.
+    TypeParam(char),
+
     /// Internal void type
     Void,
 }
@@ -77,6 +80,7 @@ impl SahaType {
             SahaType::Float => "float".to_string(),
             SahaType::Name(n) => n.to_owned(),
             SahaType::Obj => "object".to_string(),
+            SahaType::TypeParam(c) => format!("Type param {}", c),
             SahaType::Err => "error".to_string(),
             _ => "void".to_string()
         }
@@ -150,6 +154,7 @@ impl Debug for Value {
             SahaType::Name(n) => n.to_owned(),
             SahaType::Obj => format!("{:?}", self.obj.unwrap()),
             SahaType::Err => format!("{:?}", self.err.unwrap()),
+            SahaType::TypeParam(c) => format!("TypeParam {}", c)
         };
 
         return write!(f, "Value::{:?}({})", self.kind, value_str);
