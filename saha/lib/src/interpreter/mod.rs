@@ -438,6 +438,7 @@ impl<'a> AstVisitor<'a> {
             ExpressionKind::FunctionCall(identpath, call_args) => self.visit_callable_call(identpath, call_args),
             ExpressionKind::IdentPath(..) => self.resolve_ident_path_to_value(&expression),
             ExpressionKind::NewInstance(ident, args, typeparams) => self.visit_instance_newup(ident, args, typeparams),
+            ExpressionKind::ObjectAccess(lhs, accesskind, rhs) => self.visit_generic_object_access(lhs, accesskind, rhs),
             _ => unimplemented!("{:?}", expression.kind)
         }
     }
@@ -920,6 +921,23 @@ impl<'a> AstVisitor<'a> {
         }
 
         return Ok((owner, last_access_kind, member));
+    }
+
+    /// Visit a generic object access expression.
+    fn visit_generic_object_access(&mut self, lhs_expr: &Box<Expression>, access_kind: &AccessKind, rhs_expr: &Box<Expression>) -> AstResult {
+        let lhs_value = self.visit_expression(lhs_expr)?;
+
+        match &rhs_expr.kind {
+            ExpressionKind::FunctionCall(identpath, call_args) => {
+                let (_, _, ident) = self.resolve_ident_path(&identpath)?;
+                self.call_method(&lhs_value, &access_kind, &ident, &call_args)
+            },
+            ExpressionKind::IdentPath(..) => {
+                let (_, _, ident) = self.resolve_ident_path(rhs_expr)?;
+                self.access_object_property(lhs_value, access_kind.clone(), ident)
+            },
+            _ => unimplemented!()
+        }
     }
 
     /// Access an object property and get the value it contains.

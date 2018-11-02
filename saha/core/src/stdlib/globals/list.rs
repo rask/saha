@@ -18,6 +18,7 @@ use saha_lib::{
     }
 };
 
+/// Create a new List instance.
 pub fn new_instance(
     instref: InstRef,
     args: SahaFunctionArguments,
@@ -100,8 +101,9 @@ impl SahaObject for SahaList {
         }
 
         match access.member_name as &str {
-            "push" => SahaList::push(self, access, args),
-            "count" => SahaList::count(self, access, args),
+            // FIXME struct state does not seem to pass trait boundary here
+            "push" => self.push(access, args),
+            "count" => self.count(access, args),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -154,6 +156,8 @@ impl SahaList {
             return Err(err.with_type("InvalidArgumentError"));
         }
 
-        return Ok(Value::int(self.data.len() as isize));
+        let count: isize = self.data.len() as isize;
+
+        return Ok(Value::int(count));
     }
 }

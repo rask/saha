@@ -574,7 +574,7 @@ impl<'a> AstParser<'a> {
         }));
     }
 
-    /// Parse a generic expression where some member of something is being
+    /// Parse a generic object access expression where some member of something is being
     /// accessed.
     fn parse_generic_object_access(&mut self, lhs_expr: Box<Expression>) -> PR<Box<Expression>> {
         self.consume_next(vec!["->", "::"])?;
@@ -796,7 +796,6 @@ impl<'a> AstParser<'a> {
     /// FIXME: allow parsing a single arg without a name, in case we're calling
     /// a callable that receives a single parameter
     fn parse_callable_arg(&mut self) -> PR<Box<Expression>> {
-        println!("parsing a single arg at `{:?}`", self.ctok.unwrap().get_file_position());
         self.consume_next(vec!["name"])?;
 
         let argname: String = String::new();
