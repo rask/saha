@@ -124,8 +124,8 @@ impl SahaCallable for CoreFunction {
     fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(&args, &call_source_position)?;
 
-        let ret_type = match return_type {
-            Some(t) => t,
+        let ret_type = match &return_type {
+            Some(t) => t.clone(),
             None => self.return_type.clone()
         };
 
@@ -233,8 +233,8 @@ impl SahaCallable for UserFunction {
     fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(&args, &call_source_position)?;
 
-        let ret_type = match return_type {
-            Some(t) => t,
+        let ret_type = match &return_type {
+            Some(t) => t.clone(),
             None => self.return_type.clone()
         };
 
@@ -243,18 +243,66 @@ impl SahaCallable for UserFunction {
 
         let res = ast_visitor.start()?;
 
-        if res.kind != ret_type {
-            let err = RuntimeError::new(
-                &format!(
-                    "Return type mismatch for `{}`, expected `{:?}` but received `{:?}`",
-                    self.name,
-                    self.return_type,
-                    res.kind
-                ),
-                call_source_position
-            );
+        match res.kind {
+            SahaType::Obj => {
+                let wanted_name = match &ret_type {
+                    SahaType::Name(n) => n,
+                    _ => {
+                        let err = RuntimeError::new(
+                            &format!(
+                                "Return type mismatch for `{}`, expected `{:?}` but received `{:?}`",
+                                self.name,
+                                ret_type,
+                                res.kind
+                            ),
+                            call_source_position
+                        );
 
-            return Err(err.with_type("ValueError"));
+                        return Err(err.with_type("ValueError"));
+                    }
+                };
+
+                // get the object type+implements list for comparing
+                let mut inst_impl: Vec<String>;
+
+                {
+                    let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+                    let inst_lockable = st.instances.get(&res.obj.unwrap()).unwrap();
+                    let inst = inst_lockable.lock().unwrap();
+
+                    inst_impl = inst.get_implements();
+                    inst_impl.push(inst.get_fully_qualified_class_name());
+                }
+
+                if inst_impl.contains(&wanted_name) == false {
+                    let err = RuntimeError::new(
+                        &format!(
+                            "Return type mismatch for `{}`, expected `{:?}` but received `{:?}`",
+                            self.name,
+                            ret_type,
+                            res.kind
+                        ),
+                        call_source_position
+                    );
+
+                    return Err(err.with_type("ValueError"));
+                }
+            },
+            _ => {
+                if res.kind != ret_type {
+                    let err = RuntimeError::new(
+                        &format!(
+                            "Return type mismatch for `{}`, expected `{:?}` but received `{:?}`",
+                            self.name,
+                            ret_type,
+                            res.kind
+                        ),
+                        call_source_position
+                    );
+
+                    return Err(err.with_type("ValueError"));
+                }
+            }
         }
 
         return Ok(res);

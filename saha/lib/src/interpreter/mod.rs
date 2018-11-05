@@ -942,8 +942,6 @@ impl<'a> AstVisitor<'a> {
 
     /// Access an object property and get the value it contains.
     fn access_object_property(&mut self, obj: Value, access_kind: AccessKind, property_name: Identifier) -> AstResult {
-        let inst_lockable: Arc<Mutex<Box<dyn SahaObject>>>;
-
         match obj.kind {
             SahaType::Obj => (),
             _ => {
@@ -1035,19 +1033,11 @@ impl<'a> AstVisitor<'a> {
                 return Err(err.with_type("TypeError"));
             },
             SahaType::Obj => {
-                let instref: InstRef = obj.obj.unwrap();
-                let instopt: Arc<Mutex<Box<dyn SahaObject>>>;
-                let mut instance: Box<dyn SahaObject>;
+                // intopt will be a cloned arc, meaning we have a cloned reference from an existing
+                // arc
+                let mut instopt: Arc<Mutex<Box<dyn SahaObject>>>;
 
                 instopt = self.get_instance_lockable_ref(&obj.obj.unwrap(), callable.file_position.clone())?;
-
-                instance = instopt.lock().unwrap().clone();
-
-                drop(instopt); // drop the locked mutex here to prevent lockups if `self` stuff is
-                // access inside the upcoming method call
-
-                // the drop above releases the lock, so we need to validate how to manage data
-                // races when it comes to instances
 
                 let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
 
@@ -1063,6 +1053,23 @@ impl<'a> AstVisitor<'a> {
                     access_file_pos: &Some(callable.file_position.clone())
                 };
 
+                let mut instance = instopt.lock().unwrap();
+
+                // FIXME instance is locked and a separate method call underneath
+                // will access same instance to access a property with `access_object_property()`
+                // so here we need to get the _method_ reference to call directly, not the instance
+                // reference to lock and call through
+                //
+                // if we're sneaky and try to just clone the instance and release the lock by hand,
+                // we will see problems with instance state such as List data and so on, meaning
+                // only "get" calls would work, mutations not
+                //
+                // this means we cannot clone this instance, but need to call the method it owns and
+                // pass the instref into it
+                //
+                // e.g.:
+                // let method_reference = instance.get_method_ref(&callable.identifier.as_str());
+                eprintln!("SAHA: Instance calls are bugged, please fix.");
                 instance.call_member(access, call_args)
             },
             _ => {

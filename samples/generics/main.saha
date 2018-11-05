@@ -18,7 +18,14 @@ class Foobar<T, U>
 
     pub method getother() U
     {
+        self->foo();
+
         return self->qwer;
+    }
+
+    method foo()
+    {
+        //
     }
 }
 
@@ -34,9 +41,10 @@ function main() int
     alist->push(value = 1);
     alist->push(value = 2);
 
-    var counts'str = alist->count()->toString();
+    var countstr'str = alist->count()->toString();
 
-    print_line(text = counts);
+    print_line(text = "the following should say `2`");
+    print_line(text = countstr);
 
     fb->getother()->sayhello();
 
