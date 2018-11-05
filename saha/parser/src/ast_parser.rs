@@ -831,12 +831,12 @@ impl<'a> AstParser<'a> {
             _ => unreachable!()
         };
 
-        let typeparams: HashMap<char, SahaType>;
+        let typeparams: Vec<SahaType>;
 
         if let Token::OpLt(..) = self.ntok.unwrap() {
             typeparams = self.parse_new_instance_type_params()?;
         } else {
-            typeparams = HashMap::new();
+            typeparams = Vec::new();
         }
 
         self.consume_next(vec!["("])?;
@@ -873,51 +873,26 @@ impl<'a> AstParser<'a> {
     }
 
     /// Parse instance newup type param declarations.
-    fn parse_new_instance_type_params(&mut self) -> PR<HashMap<char, SahaType>> {
-        let mut tparams: HashMap<char, SahaType> = HashMap::new();
+    fn parse_new_instance_type_params(&mut self) -> PR<Vec<SahaType>> {
+        let mut tparams: Vec<SahaType> = Vec::new();
 
         self.consume_next(vec!["<"])?;
 
         let tparams_pos = self.ctok.unwrap().get_file_position();
 
         loop {
-            self.consume_next(vec!["name"])?;
-
-            let (type_char, type_pos) = match self.ctok.unwrap() {
-                Token::Name(pos, _, name) => (name, pos),
-                _ => unreachable!()
-            };
-
-            if self.validate_paramtype_name(&type_char) == false {
-                return Err(ParseError::new(
-                    &format!("Invalid type parameter name `{}`", type_char),
-                    Some(type_pos.clone())
-                ));
-            }
-
-            let type_char = type_char.chars().nth(0).unwrap();
-
-            if tparams.contains_key(&type_char) {
-                return Err(ParseError::new(
-                    &format!("Cannot redeclare parameter type `{}`", type_char),
-                    Some(type_pos.clone())
-                ));
-            }
-
-            self.consume_next(vec![":"])?;
-
             self.consume_next(vec!["name", "str", "int", "float", "bool"])?;
 
-            let (typepos, typetype) = match self.ctok.unwrap() {
-                Token::Name(pos, n, _) => (pos, SahaType::Name(n.to_string())),
-                Token::TypeInteger(pos) => (pos, SahaType::Int),
-                Token::TypeFloat(pos) => (pos, SahaType::Float),
-                Token::TypeString(pos) => (pos, SahaType::Str),
-                Token::TypeBoolean(pos) => (pos, SahaType::Bool),
+            let ty = match self.ctok.unwrap() {
+                Token::Name(_, n, _) => SahaType::Name(n.to_string()),
+                Token::TypeInteger(_) => SahaType::Int,
+                Token::TypeFloat(_) => SahaType::Float,
+                Token::TypeString(_) => SahaType::Str,
+                Token::TypeBoolean(_) => SahaType::Bool,
                 _ => unreachable!()
             };
 
-            tparams.insert(type_char, typetype);
+            tparams.push(ty);
 
             match self.ntok.unwrap() {
                 Token::OpGt(..) => {

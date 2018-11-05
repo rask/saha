@@ -486,12 +486,12 @@ impl<'a> RootParser<'a> {
             ));
         }
 
-        let paramtype_defs: HashMap<char, SahaType>;
+        let paramtype_defs: Vec<(char, SahaType)>;
 
         if let Token::OpLt(..) = self.ntok.unwrap() {
             paramtype_defs = self.parse_paramtype_defs()?;
         } else {
-            paramtype_defs = HashMap::new();
+            paramtype_defs = Vec::new();
         }
 
         self.consume_next(vec!["{"])?;
@@ -530,12 +530,13 @@ impl<'a> RootParser<'a> {
     }
 
     /// Parse parameter type definitions for a class.
-    fn parse_paramtype_defs(&mut self) -> PR<HashMap<char, SahaType>> {
-        let mut ptypes: HashMap<char, SahaType> = HashMap::new();
+    fn parse_paramtype_defs(&mut self) -> PR<Vec<(char, SahaType)>> {
+        let mut ptypes: Vec<(char, SahaType)> = Vec::new();
 
         self.consume_next(vec!["<"])?;
 
         let ptype_def_position = self.ctok.unwrap().get_file_position();
+        let mut existing: Vec<char> = vec![];
 
         loop {
             self.consume_next(vec!["name"])?;
@@ -554,14 +555,15 @@ impl<'a> RootParser<'a> {
 
             let type_char = type_char.chars().nth(0).unwrap();
 
-            if ptypes.contains_key(&type_char) {
+            if existing.contains(&type_char) {
                 return Err(ParseError::new(
                     &format!("Cannot redeclare parameter type `{}`", type_char),
                     Some(type_pos.clone())
                 ));
             }
 
-            ptypes.insert(type_char, SahaType::Void);
+            existing.push(type_char);
+            ptypes.push((type_char, SahaType::Void));
 
             match self.ntok.unwrap() {
                 Token::OpGt(..) => break,

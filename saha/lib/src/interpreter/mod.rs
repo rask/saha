@@ -8,7 +8,7 @@ use noisy_float::prelude::*;
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, MutexGuard}
+    sync::{Arc, Mutex}
 };
 
 use crate::{
@@ -16,14 +16,14 @@ use crate::{
     source::files::FilePosition,
     types::{
         Value, SahaType,
-        objects::{AccessParams, SahaObject},
+        objects::{ClassDefinition, AccessParams, SahaObject},
         functions::{
             SahaFunctionArguments,
             SahaCallable
         }
     },
-    symbol_table::InstRef,
-    errors::{Error, RuntimeError, ParseError}
+    symbol_table::{InstRef, CoreConstructorFn},
+    errors::{Error, RuntimeError}
 };
 
 type AstResult = Result<Value, RuntimeError>;
@@ -1023,7 +1023,7 @@ impl<'a> AstVisitor<'a> {
 
         let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
 
-        return func.call(call_args, Some(callable.file_position.clone()));
+        return func.call(call_args, None, Some(callable.file_position.clone()));
     }
 
     /// Call an object method.
@@ -1074,16 +1074,55 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Visit a newup expression.
-    fn visit_instance_newup(&mut self, ident: &Identifier, args: &Box<Expression>, typeparams: &HashMap<char, SahaType>) -> AstResult {
+    fn visit_instance_newup(&mut self, ident: &Identifier, args: &Box<Expression>, typeparams: &Vec<SahaType>) -> AstResult {
         let newup_args: SahaFunctionArguments = self.parse_callable_args(args)?;
         let inst_val: Value;
+        let new_instref: InstRef;
+        let mut user_inst_def: Option<ClassDefinition> = None;
+        let mut core_inst_def: Option<CoreConstructorFn> = None;
+        let created_inst: Box<dyn SahaObject>;
+
+        {
+            let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+            new_instref = st.create_instref();
+
+            if st.classes.contains_key(&ident.identifier) {
+                user_inst_def = st.classes.get(&ident.identifier).cloned();
+            }
+
+            if st.core_classes.contains_key(&ident.identifier) {
+                core_inst_def = Some(st.core_classes.get(&ident.identifier).unwrap().clone());
+            }
+        }
+
+        // we run instance creation outside the symboltable lockup lifetime to
+        // prevent race conditions when locking
+        created_inst = match (user_inst_def, core_inst_def) {
+            (Some(def), None) => self.create_new_instance(new_instref, def, newup_args, typeparams, Some(ident.file_position.clone()))?,
+            (None, Some(fnref)) => self.create_new_core_instance(new_instref, fnref, newup_args, typeparams, Some(ident.file_position.clone()))?,
+            _ => {
+                unimplemented!()
+            }
+        };
 
         {
             let mut st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
-
-            inst_val = st.create_object_instance(ident.identifier.clone(), newup_args, typeparams, &Some(ident.file_position.clone()))?;
+            st.instances.insert(new_instref, Arc::new(Mutex::new(created_inst)));
         }
 
+        inst_val = Value::obj(new_instref);
+
         return Ok(inst_val);
+    }
+
+    /// Create a new core class instance.
+    fn create_new_core_instance(&mut self, instref: InstRef, factory_fn: CoreConstructorFn, args: SahaFunctionArguments, typeparams: &Vec<SahaType>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
+        return factory_fn(instref, args, typeparams, create_pos);
+    }
+
+    /// Create a new instance from a userland class definition.
+    fn create_new_instance(&mut self, instref: InstRef, def: ClassDefinition, args: SahaFunctionArguments, typeparams: &Vec<SahaType>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
+        return def.create_new_instance(instref, args, typeparams, &create_pos);
     }
 }

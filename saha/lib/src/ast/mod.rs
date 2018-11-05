@@ -229,8 +229,9 @@ pub enum ExpressionKind {
     ObjectAccess(Box<Expression>, AccessKind, Box<Expression>),
 
     /// Newup a class. First is the class name, second is the constructor args,
-    /// which are alike function call args.
-    NewInstance(Identifier, Box<Expression>, HashMap<char, SahaType>),
+    /// which are alike function call args. Lastly there are TypeParams for
+    /// generics use.
+    NewInstance(Identifier, Box<Expression>, Vec<SahaType>),
 }
 
 /// Binary operation.

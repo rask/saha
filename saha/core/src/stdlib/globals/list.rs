@@ -22,16 +22,10 @@ use saha_lib::{
 pub fn new_instance(
     instref: InstRef,
     args: SahaFunctionArguments,
-    type_params: HashMap<char, SahaType>,
+    type_params: &Vec<SahaType>,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 1 {
-        let err = RuntimeError::new("`List` expects a single type parameter `T`", create_pos);
-
-        return Err(err.with_type("InvalidArgumentError"));
-    }
-
-    if type_params.keys().nth(0).unwrap() != &'T' {
         let err = RuntimeError::new("`List` expects a single type parameter `T`", create_pos);
 
         return Err(err.with_type("InvalidArgumentError"));
@@ -44,7 +38,7 @@ pub fn new_instance(
     }
 
     let list_inst = Box::new(SahaList {
-        param_type: type_params.get(&'T').unwrap().clone(),
+        param_type: type_params[0].clone(),
         data: vec![],
         instref: instref
     });
@@ -84,12 +78,8 @@ impl SahaObject for SahaList {
         unimplemented!()
     }
 
-    fn get_type_params(&self) -> HashMap<char, SahaType> {
-        let mut type_params = HashMap::new();
-
-        type_params.insert('T', self.param_type.clone());
-
-        return type_params;
+    fn get_type_params(&self) -> Vec<(char, SahaType)> {
+        return vec![('T', self.param_type.clone())];
     }
 
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {

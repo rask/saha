@@ -25,6 +25,9 @@ use crate::{
 /// UUID as bytes
 pub type InstRef = [u8; 16];
 
+/// Helper type for core class constructors.
+pub type CoreConstructorFn = fn(instref: InstRef, args: SahaFunctionArguments, param_types: &Vec<SahaType>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>;
+
 /// Symbol table, stores global parsed declarations and definitions, in addition
 /// to references to things that should be available globally.
 pub struct SymbolTable {
@@ -55,7 +58,7 @@ pub struct SymbolTable {
 
     /// Collection of core-defined class names and references to Rust functions
     /// to create new instances of them.
-    pub core_classes: HashMap<String, fn(insref: InstRef, args: SahaFunctionArguments, param_types: HashMap<char, SahaType>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>>,
+    pub core_classes: HashMap<String, CoreConstructorFn>,
 
     /// Class methods. These are the same as functions, but the naming
     /// convention goes as such:
@@ -123,7 +126,7 @@ impl SymbolTable {
         &mut self,
         class_name: String,
         args: SahaFunctionArguments,
-        type_params: &HashMap<char, SahaType>,
+        type_params: &Vec<SahaType>,
         create_pos: &Option<FilePosition>
     ) -> Result<Value, RuntimeError> {
         let def: Option<&ClassDefinition> = self.classes.get(&class_name);
@@ -157,7 +160,7 @@ impl SymbolTable {
         &mut self,
         class_name: String,
         args: SahaFunctionArguments,
-        type_params: &HashMap<char, SahaType>,
+        type_params: &Vec<SahaType>,
         create_pos: &Option<FilePosition>
     ) -> Result<InstRef, RuntimeError> {
         let instref = Self::get_new_uuid_bytes();
@@ -170,7 +173,7 @@ impl SymbolTable {
             return Err(err.with_type("TypeError"));
         }
 
-        let inst_result: Result<Box<dyn SahaObject>, RuntimeError> = (def.unwrap())(instref, args, type_params.clone(), create_pos.clone());
+        let inst_result: Result<Box<dyn SahaObject>, RuntimeError> = (def.unwrap())(instref, args, type_params, create_pos.clone());
 
         match inst_result {
             Ok(inst) => {
@@ -185,5 +188,10 @@ impl SymbolTable {
     /// Get a new random UUID types type instance reference.
     fn get_new_uuid_bytes() -> InstRef {
         Uuid::new_v4().as_bytes().to_owned()
+    }
+
+    /// Create a new InstRef.
+    pub fn create_instref(&self) -> InstRef {
+        return Self::get_new_uuid_bytes();
     }
 }

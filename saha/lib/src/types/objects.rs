@@ -46,7 +46,7 @@ pub trait SahaObject: Send {
     fn get_method_ref(&mut self, method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError>;
 
     /// Get type parameter definitions (i.e. generics definitions).
-    fn get_type_params(&self) -> HashMap<char, SahaType>;
+    fn get_type_params(&self) -> Vec<(char, SahaType)>;
 
     /// Call an object member, e.g. a method. We denote whether this is a static call, and we pass
     /// in an optional instance reference of the calling context (which is used to determine if this
@@ -72,7 +72,7 @@ impl Clone for Box<dyn SahaObject> {
 }
 
 /// A class property.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Property {
     pub name: String,
     pub prop_type: SahaType,
@@ -120,21 +120,70 @@ impl ValidatesArgs for ObjProperties {
             }
 
             let propk = &p.prop_type;
-            let argk = &args.get(pname).unwrap().kind;
+            let arg = &args.get(pname).unwrap();
+            let argk = &arg.kind;
 
-            if propk != argk {
-                let err = RuntimeError::new(
-                    &format!(
-                        "Invalid argument `{}`, expected `{}` but received `{}`",
-                        pname,
-                        propk.to_readable_string(),
-                        argk.to_readable_string()
-                    ),
-                    call_pos.to_owned()
-                );
+            match argk {
+                SahaType::Obj => {
+                    let wanted_name = match propk {
+                        SahaType::Name(n) => n,
+                        _ => {
+                            let err = RuntimeError::new(
+                                &format!(
+                                    "Invalid argument `{}`, expected `{}` but received `{}`",
+                                    pname,
+                                    propk.to_readable_string(),
+                                    argk.to_readable_string()
+                                ),
+                                call_pos.to_owned()
+                            );
 
-                return Err(err.with_type("InvalidArgumentError"));
-            }
+                            return Err(err.with_type("InvalidArgumentError"));
+                        }
+                    };
+
+                    // get the object type+implements list for comparing
+                    let mut inst_impl: Vec<String>;
+
+                    {
+                        let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+                        let inst_lockable = st.instances.get(&arg.obj.unwrap()).unwrap();
+                        let inst = inst_lockable.lock().unwrap();
+
+                        inst_impl = inst.get_implements();
+                        inst_impl.push(inst.get_fully_qualified_class_name());
+                    }
+
+                    if inst_impl.contains(&wanted_name) == false {
+                        let err = RuntimeError::new(
+                            &format!(
+                                "Invalid argument `{}`, expected `{}` but received `{}`",
+                                pname,
+                                propk.to_readable_string(),
+                                argk.to_readable_string()
+                            ),
+                            call_pos.to_owned()
+                        );
+
+                        return Err(err.with_type("InvalidArgumentError"));
+                    }
+                },
+                _ => {
+                    if propk != argk {
+                        let err = RuntimeError::new(
+                            &format!(
+                                "Invalid argument `{}`, expected `{}` but received `{}`",
+                                pname,
+                                propk.to_readable_string(),
+                                argk.to_readable_string()
+                            ),
+                            call_pos.to_owned()
+                        );
+
+                        return Err(err.with_type("InvalidArgumentError"));
+                    }
+                }
+            };
         }
 
         return Ok(());
@@ -147,12 +196,13 @@ impl ValidatesArgs for ObjProperties {
 
 /// A class definition, or a blueprint in other words. From these actual
 /// class object instances are created.
+#[derive(Clone)]
 pub struct ClassDefinition {
     pub name: String,
     pub fqname: String,
     pub properties: ObjProperties,
     pub implements: Vec<String>,
-    pub type_params: HashMap<char, SahaType>
+    pub type_params: Vec<(char, SahaType)>
 }
 
 impl ClassDefinition {
@@ -162,15 +212,6 @@ impl ClassDefinition {
         type_params: &HashMap<char, SahaType>,
         create_pos: &Option<FilePosition>
     ) -> Result<ObjProperties, RuntimeError> {
-        if self.type_params.len() != type_params.len() {
-            return Err(
-                RuntimeError::new(
-                    &format!("Class `{}` expects {} type parameters, {} given", self.fqname, self.type_params.len(), type_params.len()),
-                    create_pos.clone()
-                )
-            );
-        }
-
         let mut new_props: ObjProperties = HashMap::new();
 
         for (pname, p) in &self.properties {
@@ -205,10 +246,28 @@ impl ClassDefinition {
         &self,
         inst_ref: InstRef,
         args: SahaFunctionArguments,
-        typeparams: &HashMap<char, SahaType>,
+        typeparams: &Vec<SahaType>,
         create_pos: &Option<FilePosition>
     ) -> Result<Box<dyn SahaObject>, RuntimeError> {
-        let mut parsed_properties = self.get_parsed_properties(typeparams, create_pos)?;
+        if self.type_params.len() != typeparams.len() {
+            return Err(
+                RuntimeError::new(
+                    &format!("Class `{}` expects {} type parameters, {} given", self.fqname, self.type_params.len(), typeparams.len()),
+                    create_pos.clone()
+                )
+            );
+        }
+
+        let mut tyidx = 0;
+        let mut received_typarams: HashMap<char, SahaType> = HashMap::new();
+
+        for (c, _) in &self.type_params {
+            received_typarams.insert(*c, typeparams[tyidx].clone());
+
+            tyidx += 1;
+        }
+
+        let mut parsed_properties = self.get_parsed_properties(&received_typarams, create_pos)?;
 
         parsed_properties.validate_args(&args, create_pos)?;
 
@@ -242,7 +301,7 @@ impl ClassDefinition {
             properties: inst_props,
             implements: self.implements.clone(),
             inst_ref: inst_ref,
-            type_params: typeparams.clone()
+            type_params: received_typarams.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
         }));
     }
 }
@@ -269,7 +328,7 @@ pub struct UserInstance {
     inst_ref: InstRef,
     implements: Vec<String>,
     properties: HashMap<String, Property>,
-    type_params: HashMap<char, SahaType>
+    type_params: Vec<(char, SahaType)>
 }
 
 impl SahaObject for UserInstance {
@@ -310,7 +369,7 @@ impl SahaObject for UserInstance {
         return Ok(method_callable);
     }
 
-    fn get_type_params(&self) -> HashMap<char, SahaType> {
+    fn get_type_params(&self) -> Vec<(char, SahaType)> {
         return self.type_params.clone();
     }
 
@@ -320,6 +379,7 @@ impl SahaObject for UserInstance {
         let access_pos = access.access_file_pos;
         let static_access = access.is_static_access;
         let accessor_instref = access.accessor_instref;
+        let tparams = self.get_type_params();
 
         match accessor_instref {
             Some(iref) => is_self_internal_call = self.get_instance_ref() == *iref,
@@ -341,6 +401,27 @@ impl SahaObject for UserInstance {
         let member_callable = member_callable.ok().unwrap();
         let member_is_static = member_callable.is_static();
         let member_is_public = member_callable.is_public();
+        let typeparammap: HashMap<_, _> = tparams.into_iter().collect();
+        let member_ret_type = member_callable.get_return_type();
+
+        let actual_return_type: SahaType = match member_ret_type {
+            SahaType::TypeParam(ty) => {
+                let maybe_ty = typeparammap.get(&ty).unwrap_or(&SahaType::Void);
+
+                match maybe_ty {
+                    SahaType::Void => {
+                        let err = RuntimeError::new(
+                            &format!("Method `{}` on class `{}` expects a type parameter `{}`, but none was defined", member, self.get_fully_qualified_class_name(), ty),
+                            access_pos.to_owned()
+                        );
+
+                        return Err(err.with_type("TypeError"));
+                    },
+                    _ => maybe_ty.clone()
+                }
+            },
+            _ => member_ret_type
+        };
 
         if member_is_public == false && is_self_internal_call == false {
             let err = RuntimeError::new(
@@ -368,7 +449,7 @@ impl SahaObject for UserInstance {
             call_args.insert("self".to_string(), Value::obj(self.get_instance_ref()));
         }
 
-        return member_callable.call(call_args, access_pos.clone());
+        return member_callable.call(call_args, Some(actual_return_type), access_pos.clone());
     }
 
     fn access_property(&self, access: AccessParams) -> SahaCallResult {

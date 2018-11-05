@@ -1,16 +1,35 @@
-class Foobar<T>
+class Moikka
+{
+    pub method sayhello()
+    {
+        print_line(text = "moikkamoi");
+    }
+}
+
+class Foobar<T, U>
 {
     pub prop asdf'T;
+    pub prop qwer'U;
+
+    pub method getprop() T
+    {
+        return self->asdf;
+    }
+
+    pub method getother() U
+    {
+        return self->qwer;
+    }
 }
 
 function main() int
 {
-    var fb'Foobar<T: int> = new Foobar<T: int>(asdf = 2);
-    var alist'List<T: int> = new List<T: int>();
+    var fb'Foobar<int, Moikka> = new Foobar<int, Moikka>(asdf = 2, qwer = new Moikka());
+    var alist'List<int> = new List<int>();
 
     fb->asdf = 3;
 
-    print_line(text = fb->asdf->toString());
+    print_line(text = fb->getprop()->toString());
 
     alist->push(value = 1);
     alist->push(value = 2);
@@ -18,6 +37,8 @@ function main() int
     var counts'str = alist->count()->toString();
 
     print_line(text = counts);
+
+    fb->getother()->sayhello();
 
     return 0;
 }

@@ -98,7 +98,7 @@ fn run_saha_main() -> Result<i32, RuntimeError> {
         mainfn = (**main_callable).as_userfunction().clone();
     }
 
-    let main_result = mainfn.call(HashMap::new(), Some(FilePosition::unknown()))?;
+    let main_result = mainfn.call(HashMap::new(), None, Some(FilePosition::unknown()))?;
 
     // other checks should enforce that we're working with an integer
     let return_code = main_result.int.unwrap_or(-255);
