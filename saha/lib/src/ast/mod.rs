@@ -96,35 +96,6 @@ pub enum StatementKind {
     /// ```
     Return(Box<Expression>),
 
-    /// Try statements. First is the try block, then is a collection of catch
-    /// blocks. Lastly there is a `finally` block which is optional.
-    ///
-    /// ```saha
-    /// try {
-    ///     //
-    /// }
-    /// ```
-    Try(Box<Block>, Vec<Box<Statement>>, Option<Box<Block>>),
-
-    /// Catch statements. Must be after a Try statement in source. Contains two
-    /// identifiers: one for the error type, then the variable to use inside
-    /// the block for the caught expection/error.
-    ///
-    /// ```saha
-    /// ...
-    /// } catch (Something e) {
-    ///     //
-    /// }
-    /// ```
-    Catch(Identifier, Identifier, Box<Block>),
-
-    /// Raise statement.
-    ///
-    /// ```saha
-    /// raise new SomeError();
-    /// ```
-    Raise(Box<Expression>),
-
     /// Break statement. Used in loops.
     Break,
 

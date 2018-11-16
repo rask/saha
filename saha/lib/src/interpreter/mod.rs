@@ -220,8 +220,6 @@ impl<'a> AstVisitor<'a> {
             StatementKind::Expression(expr) => (self.visit_expression(&expr)?, false),
             StatementKind::If(if_cond, if_block, elifs, else_block) => self.visit_if_statement(if_cond, if_block, elifs, else_block)?,
             StatementKind::Loop(loop_block) => self.visit_loop_statement(loop_block)?,
-            StatementKind::Raise(expr) => self.visit_raise_statement(expr)?,
-            StatementKind::Try(try_block, catches, finally) => self.visit_try_catch_statement(try_block, catches, finally)?,
             StatementKind::Break => (Value::void(), true),
             StatementKind::Continue => (Value::void(), false),
             _ => unimplemented!("{:?}", statement.kind)
@@ -261,11 +259,6 @@ impl<'a> AstVisitor<'a> {
         self.create_local_ref(refname, (var_type.to_owned(), default_value), refpos)?;
 
         return Ok(Value::void());
-    }
-
-    /// Visit a raise statement that raises errors.
-    fn visit_raise_statement(&mut self, expr: &Box<Expression>) -> BailableAstResult {
-        unimplemented!()
     }
 
     /// Visit an if-elseif-else statement. Returns a bailable result, meaning
@@ -384,36 +377,6 @@ impl<'a> AstVisitor<'a> {
         }
 
         return Ok((loop_val, false));
-    }
-
-    fn visit_try_catch_statement(&mut self, try_block: &Box<Block>, catches: &Vec<Box<Statement>>, finally: &Option<Box<Block>>) -> BailableAstResult {
-        let try_result = self.visit_block(try_block);
-
-        if try_result.is_ok() {
-            // no issues, return without attempting to catch anything
-            return Ok(try_result.ok().unwrap());
-        }
-
-        let mut was_caught = false;
-
-        for c_stmt in catches {
-            let (catch_type, catch_ident, catch_block) = match &c_stmt.kind {
-                StatementKind::Catch(c, i, b) => (c.clone(), i.clone(), b),
-                _ => unreachable!()
-            };
-
-            unimplemented!()
-        }
-
-        if finally.is_some() {
-
-        }
-
-        if was_caught == false {
-            return Err(try_result.err().unwrap());
-        }
-
-        unimplemented!()
     }
 
     /// Visit an expression.
