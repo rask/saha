@@ -29,13 +29,13 @@ pub fn new_instance(
     if type_params.len() != 2 {
         let err = RuntimeError::new("`List` expects two type parameters: `T` and `U`", create_pos);
 
-        return Err(err.with_type("InvalidArgumentError"));
+        return Err(err);
     }
 
     if args.len() > 0 {
         let err = RuntimeError::new("`Result` expects no arguments", create_pos);
 
-        return Err(err.with_type("InvalidArgumentError"));
+        return Err(err);
     }
 
     let list_inst = Box::new(SahaList {

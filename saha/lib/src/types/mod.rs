@@ -255,7 +255,7 @@ impl Value {
                 Some(call_pos.clone())
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         let (mparams, mfn) = valuemethods.get(method_name).unwrap();

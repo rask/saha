@@ -146,7 +146,7 @@ impl SahaCallable for CoreFunction {
                             call_source_position
                         );
 
-                        return Err(err.with_type("ValueError"));
+                        return Err(err);
                     }
                 };
 
@@ -173,7 +173,7 @@ impl SahaCallable for CoreFunction {
                         call_source_position
                     );
 
-                    return Err(err.with_type("ValueError"));
+                    return Err(err);
                 }
             },
             _ => {
@@ -188,7 +188,7 @@ impl SahaCallable for CoreFunction {
                         call_source_position
                     );
 
-                    return Err(err.with_type("ValueError"));
+                    return Err(err);
                 }
             }
         }
@@ -258,7 +258,7 @@ impl SahaCallable for UserFunction {
                             call_source_position
                         );
 
-                        return Err(err.with_type("ValueError"));
+                        return Err(err);
                     }
                 };
 
@@ -285,7 +285,7 @@ impl SahaCallable for UserFunction {
                         call_source_position
                     );
 
-                    return Err(err.with_type("ValueError"));
+                    return Err(err);
                 }
             },
             _ => {
@@ -300,7 +300,7 @@ impl SahaCallable for UserFunction {
                         call_source_position
                     );
 
-                    return Err(err.with_type("ValueError"));
+                    return Err(err);
                 }
             }
         }
@@ -369,7 +369,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                     call_pos.to_owned()
                 );
 
-                return Err(err.with_type("InvalidArgumentError"));
+                return Err(err);
             } else {
                 // no arg given, but a default is provided, so we're good
                 return Ok(());
@@ -390,7 +390,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                 call_pos.to_owned()
             );
 
-            return Err(err.with_type("InvalidArgumentError"));
+            return Err(err);
         }
 
         // all OK for this arg
@@ -420,7 +420,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                             call_pos.to_owned()
                         );
 
-                        return Err(err.with_type("InvalidArgumentError"));
+                        return Err(err);
                     }
                     _ => ()
                 };
@@ -440,7 +440,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                     call_pos.to_owned()
                 );
 
-                return Err(err.with_type("InvalidArgumentError"));
+                return Err(err);
             }
 
             // all OK for this arg, continue loop

@@ -105,7 +105,7 @@ impl ValidatesArgs for ObjProperties {
         if args.len() > self.len() {
             let err = RuntimeError::new("Too many arguments provided", call_pos.to_owned());
 
-            return Err(err.with_type("InvalidArgumentError"));
+            return Err(err);
         }
 
         for (pname, p) in self {
@@ -113,7 +113,7 @@ impl ValidatesArgs for ObjProperties {
                 // no default and no arg for it given
                 let err = RuntimeError::new(&format!("The `{}` argument is required", pname), call_pos.to_owned());
 
-                return Err(err.with_type("InvalidArgumentError"));
+                return Err(err);
             } else if p.default.kind != SahaType::Void && args.contains_key(pname) == false {
                 // default exists and no args was provided, we're OK here
                 continue;
@@ -138,7 +138,7 @@ impl ValidatesArgs for ObjProperties {
                                 call_pos.to_owned()
                             );
 
-                            return Err(err.with_type("InvalidArgumentError"));
+                            return Err(err);
                         }
                     };
 
@@ -165,7 +165,7 @@ impl ValidatesArgs for ObjProperties {
                             call_pos.to_owned()
                         );
 
-                        return Err(err.with_type("InvalidArgumentError"));
+                        return Err(err);
                     }
                 },
                 _ => {
@@ -180,7 +180,7 @@ impl ValidatesArgs for ObjProperties {
                             call_pos.to_owned()
                         );
 
-                        return Err(err.with_type("InvalidArgumentError"));
+                        return Err(err);
                     }
                 }
             };
@@ -394,7 +394,7 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         // callable result contains an arc and mutex which we need to lock and unwrap
@@ -415,7 +415,7 @@ impl SahaObject for UserInstance {
                             access_pos.to_owned()
                         );
 
-                        return Err(err.with_type("TypeError"));
+                        return Err(err);
                     },
                     _ => maybe_ty.clone()
                 }
@@ -429,7 +429,7 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         if member_is_static == true && static_access == false {
@@ -438,7 +438,7 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         // clone here to prevent any accidental side effects
@@ -473,7 +473,7 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         let member_prop = member_prop.unwrap();
@@ -490,7 +490,7 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         if member_is_static == true && static_access == false {
@@ -499,14 +499,14 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         } else if member_is_static == false && static_access == true {
             let err = RuntimeError::new(
                 &format!("Attempted to access instance property `{}` statically on class `{}`", prop, self_fqname),
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         match &member_prop.value {
@@ -517,7 +517,7 @@ impl SahaObject for UserInstance {
                     access_pos.to_owned()
                 );
 
-                return Err(err.with_type("KeyError"));
+                return Err(err);
             }
         }
     }
@@ -543,7 +543,7 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         let member_prop = member_prop.unwrap();
@@ -560,7 +560,7 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         if member_is_static == true && static_access == false {
@@ -569,14 +569,14 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         } else if member_is_static == false && static_access == true {
             let err = RuntimeError::new(
                 &format!("Attempted to mutate instance property `{}` statically on class `{}`", prop, self_fqname),
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         if member_prop.prop_type != new_value.kind {
@@ -591,7 +591,7 @@ impl SahaObject for UserInstance {
                 access_pos.to_owned()
             );
 
-            return Err(err.with_type("TypeError"));
+            return Err(err);
         }
 
         let new_prop = member_prop.with_value(&new_value);

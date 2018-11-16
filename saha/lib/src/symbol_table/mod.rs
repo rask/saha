@@ -170,7 +170,7 @@ impl SymbolTable {
         if def.is_none() {
             let err = RuntimeError::new(&format!("Cannot create instance of unknown class `{}`", class_name), create_pos.to_owned());
 
-            return Err(err.with_type("TypeError"));
+            return Err(err);
         }
 
         let inst_result: Result<Box<dyn SahaObject>, RuntimeError> = (def.unwrap())(instref, args, type_params, create_pos.clone());

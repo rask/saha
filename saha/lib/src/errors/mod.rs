@@ -9,7 +9,6 @@
 use std::fmt::Debug;
 
 use crate::{
-    types::Value,
     source::files::FilePosition
 };
 
@@ -84,22 +83,6 @@ pub struct RuntimeError {
     message: String,
     file_position: Option<FilePosition>,
     saha_error_type: String,
-}
-
-impl RuntimeError {
-    /// Get the same error, but with a different Saha displayable Saha error
-    /// type. Creates a completely new error instance.
-    pub fn with_type(&self, with_type: &str) -> Self {
-        return RuntimeError {
-            message: self.message.to_owned(),
-            file_position: self.file_position.to_owned(),
-            saha_error_type: with_type.to_string()
-        };
-    }
-
-    pub fn from_error_value(err_val: &Value, position: &FilePosition) -> Self {
-        unimplemented!()
-    }
 }
 
 impl Error for RuntimeError {

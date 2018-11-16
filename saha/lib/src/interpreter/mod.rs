@@ -93,7 +93,7 @@ impl<'a> AstVisitor<'a> {
         if self.local_refs.get(&name).is_some() {
             let err = RuntimeError::new(&format!("Cannot redeclare variable `{}`", name), Some(refpos.clone()));
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         self.local_refs.insert(name, value);
@@ -108,7 +108,7 @@ impl<'a> AstVisitor<'a> {
         if old.is_none() {
             let err = RuntimeError::new(&format!("Cannot access undefined variable `{}`", name), Some(refpos.clone()));
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         let (old_type, _) = old.unwrap();
@@ -124,7 +124,7 @@ impl<'a> AstVisitor<'a> {
                 Some(refpos.clone())
             );
 
-            return Err(err.with_type("TypeError"));
+            return Err(err);
         }
 
         self.local_refs.insert(name, (old_type.clone(), value));
@@ -139,7 +139,7 @@ impl<'a> AstVisitor<'a> {
         if val.is_none() {
             let err = RuntimeError::new(&format!("Cannot access undefined variable `{}`", name), Some(refpos.clone()));
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         let (_, value) = val.unwrap();
@@ -147,7 +147,7 @@ impl<'a> AstVisitor<'a> {
         if value.kind == SahaType::Void {
             let err = RuntimeError::new(&format!("Cannot access uninitialized variable `{}`", name), Some(refpos.clone()));
 
-            return Err(err.with_type("TypeError"));
+            return Err(err);
         }
 
         return Ok(value.clone());
@@ -163,7 +163,7 @@ impl<'a> AstVisitor<'a> {
                 Some(access_pos)
             );
 
-            return Err(err.with_type("KeyError"));
+            return Err(err);
         }
 
         return Ok(st.instances.get(instref).unwrap().clone());
@@ -254,7 +254,7 @@ impl<'a> AstVisitor<'a> {
                     Some(def_expr.file_position)
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         }
 
@@ -265,19 +265,7 @@ impl<'a> AstVisitor<'a> {
 
     /// Visit a raise statement that raises errors.
     fn visit_raise_statement(&mut self, expr: &Box<Expression>) -> BailableAstResult {
-        let raisable = self.visit_expression(expr)?;
-
-        match raisable.kind {
-            SahaType::Err => Err(RuntimeError::from_error_value(&raisable, &expr.file_position)),
-            _ => {
-                let err = RuntimeError::new(
-                    &format!("Attempted to raise a non-error type `{:?}`", raisable.kind),
-                    Some(expr.file_position.clone())
-                );
-
-                Err(err)
-            }
-        }
+        unimplemented!()
     }
 
     /// Visit an if-elseif-else statement. Returns a bailable result, meaning
@@ -301,7 +289,7 @@ impl<'a> AstVisitor<'a> {
                     Some(cond_pos)
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -367,7 +355,7 @@ impl<'a> AstVisitor<'a> {
                     Some(cond_pos)
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -522,7 +510,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -546,7 +534,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -570,7 +558,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -590,7 +578,7 @@ impl<'a> AstVisitor<'a> {
                 if rhs_value.float.unwrap() == r64(0.0) {
                     let err = RuntimeError::new("Division by zero", Some(op_pos.clone()));
 
-                    return Err(err.with_type("MathError"));
+                    return Err(err);
                 }
 
                 Value::float(lhs_value.float.unwrap() / rhs_value.float.unwrap())
@@ -599,7 +587,7 @@ impl<'a> AstVisitor<'a> {
                 if rhs_value.int.unwrap() == 0 {
                     let err = RuntimeError::new("Division by zero", Some(op_pos.clone()));
 
-                    return Err(err.with_type("MathError"));
+                    return Err(err);
                 }
 
                 Value::int(lhs_value.int.unwrap() / rhs_value.int.unwrap())
@@ -610,7 +598,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -634,7 +622,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -658,7 +646,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -682,7 +670,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -706,7 +694,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -733,7 +721,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -760,7 +748,7 @@ impl<'a> AstVisitor<'a> {
                     Some(op_pos.clone())
                 );
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -781,7 +769,7 @@ impl<'a> AstVisitor<'a> {
             _ => {
                 let err = RuntimeError::new("Invalid left operand for `&&`, not a boolean", Some(op_pos.clone()));
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -799,7 +787,7 @@ impl<'a> AstVisitor<'a> {
             _ => {
                 let err = RuntimeError::new("Invalid right operand for `&&`, not a boolean", Some(op_pos.clone()));
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -821,7 +809,7 @@ impl<'a> AstVisitor<'a> {
             _ => {
                 let err = RuntimeError::new("Invalid left operand for `&&`, not a boolean", Some(op_pos.clone()));
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -839,7 +827,7 @@ impl<'a> AstVisitor<'a> {
             _ => {
                 let err = RuntimeError::new("Invalid right operand for `&&`, not a boolean", Some(op_pos.clone()));
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             }
         };
 
@@ -857,7 +845,7 @@ impl<'a> AstVisitor<'a> {
                 } else {
                     let err = RuntimeError::new("Invalid unary negation operand, expected boolean", Some(unop.file_position.clone()));
 
-                    return Err(err.with_type("TypeError"));
+                    return Err(err);
                 }
             },
             UnaryOpKind::Minus => {
@@ -867,7 +855,7 @@ impl<'a> AstVisitor<'a> {
                     _ => {
                         let err = RuntimeError::new("Invalid unary minus operand, expected boolean", Some(unop.file_position.clone()));
 
-                        return Err(err.with_type("TypeError"));
+                        return Err(err);
                     }
                 }
             }
@@ -950,7 +938,7 @@ impl<'a> AstVisitor<'a> {
                     Some(property_name.file_position)
                 );
 
-                return Err(err.with_type("KeyError"));
+                return Err(err);
             }
         };
 
@@ -1011,7 +999,7 @@ impl<'a> AstVisitor<'a> {
                     Some(callable.file_position.clone())
                 );
 
-                return Err(err.with_type("KeyError"));
+                return Err(err);
             }
 
             let funcopt = st.functions.get(&callable.identifier).unwrap();
@@ -1030,7 +1018,7 @@ impl<'a> AstVisitor<'a> {
             SahaType::Void => {
                 let err = RuntimeError::new("Cannot access property or call method on a void value", Some(callable.file_position.clone()));
 
-                return Err(err.with_type("TypeError"));
+                return Err(err);
             },
             SahaType::Obj => {
                 // intopt will be a cloned arc, meaning we have a cloned reference from an existing

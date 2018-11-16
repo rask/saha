@@ -28,13 +28,13 @@ pub fn new_instance(
     if type_params.len() != 1 {
         let err = RuntimeError::new("`List` expects a single type parameter `T`", create_pos);
 
-        return Err(err.with_type("InvalidArgumentError"));
+        return Err(err);
     }
 
     if args.len() > 0 {
         let err = RuntimeError::new("`List` expects no arguments", create_pos);
 
-        return Err(err.with_type("InvalidArgumentError"));
+        return Err(err);
     }
 
     let list_inst = Box::new(SahaList {
@@ -161,7 +161,7 @@ impl SahaList {
         if args.contains_key("value") == false {
             let err = RuntimeError::new("Invalid arguments, `value` is required", access.access_file_pos.clone());
 
-            return Err(err.with_type("InvalidArgumentError"));
+            return Err(err);
         }
 
         if args.len() > 1 {
@@ -172,7 +172,7 @@ impl SahaList {
 
                 let err = RuntimeError::new(&format!("Unknown argument `{}` given", argname), access.access_file_pos.clone());
 
-                return Err(err.with_type("InvalidArgumentError"));
+                return Err(err);
             }
         }
 
@@ -181,7 +181,7 @@ impl SahaList {
         if pushed_val.kind != self.param_type {
             let err = RuntimeError::new(&format!("Invalid argument `value`: expected type `{:?}`, received `{:?}`", self.param_type, pushed_val.kind), access.access_file_pos.clone());
 
-            return Err(err.with_type("InvalidArgumentError"));
+            return Err(err);
         }
 
         self.data.push(pushed_val.clone());
@@ -194,7 +194,7 @@ impl SahaList {
         if args.len() > 0 {
             let err = RuntimeError::new("Invalid arguments, no arguments expected", access.access_file_pos.clone());
 
-            return Err(err.with_type("InvalidArgumentError"));
+            return Err(err);
         }
 
         println!("is actually {:?}", self.data);
