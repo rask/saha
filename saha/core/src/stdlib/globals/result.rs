@@ -38,10 +38,12 @@ pub fn new_instance(
         return Err(err);
     }
 
-    let list_inst = Box::new(SahaList {
+    //FIXME typeparam validation
+
+    let result_inst = Box::new(SahaResult {
         success_type: type_params[0].clone(),
         fail_type: type_params[0].clone(),
-        value: Value::void(),
+        result_value: Value::void(),
         is_success: false,
         instref: instref
     });
@@ -50,17 +52,22 @@ pub fn new_instance(
 }
 
 /// SahaResult is the result type generic class for result outcomes in Saha.
+#[derive(Clone)]
 pub struct SahaResult {
     instref: InstRef,
-    success_type: SahaType,
-    fail_type: SahaType,
-    result_value: Value,
-    is_success: bool
+    pub success_type: SahaType,
+    pub fail_type: SahaType,
+    pub result_value: Value,
+    pub is_success: bool
 }
 
 impl SahaObject for SahaResult {
     fn get_instance_ref(&self) -> InstRef {
         return self.instref.clone();
+    }
+
+    fn is_core_defined(&self) -> bool {
+        return true;
     }
 
     fn get_class_name(&self) -> String {
@@ -92,19 +99,20 @@ impl SahaObject for SahaResult {
 
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
         if access.is_static_access {
-            return Err(RuntimeError::new(
-                &format!("No static method `{}` defined for `{}`", access.member_name, self.get_class_name()),
-                access.access_file_pos.clone()
-            ));
-        }
-
-        match access.member_name as &str {
-            // FIXME struct state does not seem to pass trait boundary here
-            _ => {
-                return Err(RuntimeError::new(
-                    &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
+            match access.member_name as &str {
+                _ => Err(RuntimeError::new(
+                    &format!("No static method `{}` defined for `{}`", access.member_name, self.get_class_name()),
                     access.access_file_pos.clone()
-                ));
+                ))
+            }
+        } else {
+            match access.member_name as &str {
+                _ => {
+                    Err(RuntimeError::new(
+                        &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
+                        access.access_file_pos.clone()
+                    ))
+                }
             }
         }
     }
@@ -119,15 +127,5 @@ impl SahaObject for SahaResult {
 
     fn box_clone(&self) -> Box<dyn SahaObject> {
         return Box::new(self.clone());
-    }
-}
-
-impl SahaResult {
-    pub fn fail(&mut self, with_value: Value) -> SahaResult {
-        unimplemented!()
-    }
-
-    pub fn succeed(&mut self, with_value: Value) -> SahaResult {
-        unimplemented!()
     }
 }

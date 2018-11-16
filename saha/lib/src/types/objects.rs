@@ -29,6 +29,10 @@ pub trait SahaObject: Send {
     /// Get the instance reference for this object.
     fn get_instance_ref(&self) -> InstRef;
 
+    /// Is is a core class or a user class? Core classes get some runtime adjustments when it comes
+    /// to accessing and method calls.
+    fn is_core_defined(&self) -> bool;
+
     /// Get the class name for the object without module path.
     fn get_class_name(&self) -> String;
 
@@ -334,6 +338,10 @@ pub struct UserInstance {
 impl SahaObject for UserInstance {
     fn get_instance_ref(&self) -> InstRef {
         return self.inst_ref;
+    }
+
+    fn is_core_defined(&self) -> bool {
+        return false;
     }
 
     fn get_class_name(&self) -> String {

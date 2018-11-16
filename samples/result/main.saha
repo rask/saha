@@ -1,0 +1,17 @@
+function main() int
+{
+    var res'Result<int, bool> = Result::ok(value = 2);
+
+    var success'int;
+    var failed'bool;
+
+    if (res->succeeded()) {
+        success = res->unwrap();
+        failed = false;
+    } else {
+        success = 0;
+        failed = true;
+    }
+
+    return 0;
+}

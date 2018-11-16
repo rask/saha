@@ -21,10 +21,19 @@ pub fn register_stdlib() {
     }
 
     register_list_class();
+    register_result_class();
 }
 
+/// Register the stdlib List type.
 fn register_list_class() {
     let mut st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
 
     st.core_classes.insert("List".to_string(), globals::list::new_instance);
+}
+
+/// Register the stdlib Result type.
+fn register_result_class() {
+    let mut st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+    st.core_classes.insert("Result".to_string(), globals::result::new_instance);
 }

@@ -46,16 +46,21 @@ pub fn new_instance(
     return Ok(list_inst);
 }
 
+/// SahaList is the core definition of the `List<T>` type in Saha.
 #[derive(Clone, Debug)]
 struct SahaList {
     instref: InstRef,
     param_type: SahaType,
-    data: Vec<Value>
+    pub data: Vec<Value>
 }
 
 impl SahaObject for SahaList {
     fn get_instance_ref(&self) -> InstRef {
         return self.instref.clone();
+    }
+
+    fn is_core_defined(&self) -> bool {
+        return true;
     }
 
     fn get_class_name(&self) -> String {
@@ -94,10 +99,10 @@ impl SahaObject for SahaList {
 
         match access.member_name as &str {
             // FIXME struct state does not seem to pass trait boundary here
-            //"push" => list_push(list_type, &mut self.data, args, access),
-            //"count" => list_count(&self.data, args, access),
-            "push" => self.push(access, args),
-            "count" => self.count(access, args),
+            "push" => list_push(list_type, &mut self.data, args, access),
+            "count" => list_count(&self.data, args, access),
+            //"push" => self.push(access, args),
+            //"count" => self.count(access, args),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -153,54 +158,4 @@ fn list_count(data: &Vec<Value>, args: SahaFunctionArguments, access: AccessPara
     let count = data.len();
 
     return Ok(Value::int(count as isize));
-}
-
-impl SahaList {
-    /// Pushes a value to the end of a list object.
-    fn push(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
-        if args.contains_key("value") == false {
-            let err = RuntimeError::new("Invalid arguments, `value` is required", access.access_file_pos.clone());
-
-            return Err(err);
-        }
-
-        if args.len() > 1 {
-            for (argname, _) in &args {
-                if argname == "value" {
-                    continue;
-                }
-
-                let err = RuntimeError::new(&format!("Unknown argument `{}` given", argname), access.access_file_pos.clone());
-
-                return Err(err);
-            }
-        }
-
-        let pushed_val = args.get("value").unwrap();
-
-        if pushed_val.kind != self.param_type {
-            let err = RuntimeError::new(&format!("Invalid argument `value`: expected type `{:?}`, received `{:?}`", self.param_type, pushed_val.kind), access.access_file_pos.clone());
-
-            return Err(err);
-        }
-
-        self.data.push(pushed_val.clone());
-
-        return Ok(Value::void());
-    }
-
-    /// Returns the count of items inside the list.
-    fn count(&self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
-        if args.len() > 0 {
-            let err = RuntimeError::new("Invalid arguments, no arguments expected", access.access_file_pos.clone());
-
-            return Err(err);
-        }
-
-        println!("is actually {:?}", self.data);
-
-        let count: isize = self.data.len() as isize;
-
-        return Ok(Value::int(count));
-    }
 }

@@ -984,12 +984,6 @@ impl<'a> AstVisitor<'a> {
                 return Err(err);
             },
             SahaType::Obj => {
-                // intopt will be a cloned arc, meaning we have a cloned reference from an existing
-                // arc
-                let mut instopt: Arc<Mutex<Box<dyn SahaObject>>>;
-
-                instopt = self.get_instance_lockable_ref(&obj.obj.unwrap(), callable.file_position.clone())?;
-
                 let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
 
                 let is_static_call = match access_kind {
@@ -1000,28 +994,40 @@ impl<'a> AstVisitor<'a> {
                 let access = AccessParams {
                     is_static_access: is_static_call,
                     member_name: &callable.identifier,
-                    accessor_instref: &self.self_ref,
+                    accessor_instref: &self.self_ref.clone(),
                     access_file_pos: &Some(callable.file_position.clone())
                 };
 
-                let mut instance = instopt.lock().unwrap();
+                // intopt will be a cloned arc, meaning we have a cloned reference from an existing
+                // arc
+                let instopt: Arc<Mutex<Box<dyn SahaObject>>>;
+                let method_ref: Arc<Box<dyn SahaCallable>>;
+                let instref;
+                let fqname;
+                let inst_tparams;
 
-                // FIXME instance is locked and a separate method call underneath
-                // will access same instance to access a property with `access_object_property()`
-                // so here we need to get the _method_ reference to call directly, not the instance
-                // reference to lock and call through
-                //
-                // if we're sneaky and try to just clone the instance and release the lock by hand,
-                // we will see problems with instance state such as List data and so on, meaning
-                // only "get" calls would work, mutations not
-                //
-                // this means we cannot clone this instance, but need to call the method it owns and
-                // pass the instref into it
-                //
-                // e.g.:
-                // let method_reference = instance.get_method_ref(&callable.identifier.as_str());
-                eprintln!("SAHA: Instance calls are bugged, please fix.");
-                instance.call_member(access, call_args)
+                {
+                    instopt = self.get_instance_lockable_ref(&obj.obj.unwrap(), callable.file_position.clone())?;
+
+                    let mut instance = instopt.lock().unwrap();
+
+                    if instance.is_core_defined() {
+                        // we want to allow "pure" rust instances to be able to bypass the symbol
+                        // table, and we should make sure no core method locks the instance inside
+                        // these member calls
+                        return instance.call_member(access, call_args);
+                    }
+
+                    // userland instance locks need to be dropped and methods called separately, to
+                    // prevent lockups for instances
+
+                    instref = instance.get_instance_ref();
+                    fqname = instance.get_fully_qualified_class_name();
+                    method_ref = instance.get_method_ref(&callable.identifier.as_str())?;
+                    inst_tparams = instance.get_type_params();
+                }
+
+                self.call_instance_member(instref,  method_ref, access, call_args, inst_tparams, fqname)
             },
             _ => {
                 let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
@@ -1032,8 +1038,76 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Call an instance method.
-    fn call_instance_member(&mut self, method_ref: Box<dyn SahaCallable>, access: AccessParams, args: SahaFunctionArguments) -> AstResult {
-        unimplemented!()
+    fn call_instance_member(
+        &mut self,
+        instref: InstRef,
+        method_ref: Arc<Box<dyn SahaCallable>>,
+        access: AccessParams,
+        args: SahaFunctionArguments,
+        type_params: Vec<(char, SahaType)>,
+        classname: String
+    ) -> AstResult {
+        let member = access.member_name;
+        let access_pos = access.access_file_pos;
+        let static_access = access.is_static_access;
+        let accessor_instref = access.accessor_instref;
+
+        let is_self_internal_call = match accessor_instref {
+            Some(iref) => instref == *iref,
+            _ => false
+        };
+
+        let member_is_static = method_ref.is_static();
+        let member_is_public = method_ref.is_public();
+        let typeparammap: HashMap<_, _> = type_params.into_iter().collect();
+        let member_ret_type = method_ref.get_return_type();
+
+        let actual_return_type: SahaType = match member_ret_type {
+            SahaType::TypeParam(ty) => {
+                let maybe_ty = typeparammap.get(&ty).unwrap_or(&SahaType::Void);
+
+                match maybe_ty {
+                    SahaType::Void => {
+                        let err = RuntimeError::new(
+                            &format!("Method `{}` on class `{}` expects a type parameter `{}`, but none was defined", member, classname, ty),
+                            access_pos.to_owned()
+                        );
+
+                        return Err(err);
+                    },
+                    _ => maybe_ty.clone()
+                }
+            },
+            _ => member_ret_type
+        };
+
+        if member_is_public == false && is_self_internal_call == false {
+            let err = RuntimeError::new(
+                &format!("Attempted to call private method `{}` on class `{}`", member, classname),
+                access_pos.to_owned()
+            );
+
+            return Err(err);
+        }
+
+        if member_is_static == true && static_access == false {
+            let err = RuntimeError::new(
+                &format!("Attempted to call static method `{}` unstatically on class `{}`", member, classname),
+                access_pos.to_owned()
+            );
+
+            return Err(err);
+        }
+
+        // clone here to prevent any accidental side effects
+        let mut call_args: SahaFunctionArguments = args.clone();
+
+        if member_is_static == false {
+            // insert `self` to the call
+            call_args.insert("self".to_string(), Value::obj(instref));
+        }
+
+        return method_ref.call(call_args, Some(actual_return_type), Vec::new(), access_pos.clone());
     }
 
     /// Visit a newup expression.

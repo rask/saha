@@ -57,9 +57,6 @@ pub enum SahaType {
     /// table
     Obj,
 
-    /// Error instances.
-    Err,
-
     /// Names, which should be resolved to other types
     Name(String),
 
@@ -81,7 +78,6 @@ impl SahaType {
             SahaType::Name(n) => n.to_owned(),
             SahaType::Obj => "object".to_string(),
             SahaType::TypeParam(c) => format!("Type param {}", c),
-            SahaType::Err => "error".to_string(),
             _ => "void".to_string()
         }
     }
@@ -97,7 +93,6 @@ pub struct Value {
     pub bool: Option<bool>,
     pub name: Option<String>,
     pub obj: Option<InstRef>,
-    pub err: Option<InstRef>,
     pub void: ()
 }
 
@@ -113,7 +108,6 @@ impl PartialEq for Value {
                 _ => false
             },
             SahaType::Obj => self.obj == other.obj,
-            SahaType::Err => self.err == other.err,
             SahaType::Void => match other.kind {
                 SahaType::Void => true,
                 _ => false
@@ -135,7 +129,6 @@ impl Default for Value {
             float: None,
             name: None,
             obj: None,
-            err: None,
             void: ()
         };
     }
@@ -153,7 +146,6 @@ impl Debug for Value {
             SahaType::Str => (self.str).clone().unwrap(),
             SahaType::Name(n) => n.to_owned(),
             SahaType::Obj => format!("{:?}", self.obj.unwrap()),
-            SahaType::Err => format!("{:?}", self.err.unwrap()),
             SahaType::TypeParam(c) => format!("TypeParam {}", c)
         };
 
@@ -223,16 +215,6 @@ impl Value {
 
         v.kind = SahaType::Obj;
         v.obj = Some(inst);
-
-        return v;
-    }
-
-    /// Create a new error ref value.
-    pub fn err(inst: InstRef) -> Value {
-        let mut v = Value::new();
-
-        v.kind = SahaType::Err;
-        v.err = Some(inst);
 
         return v;
     }
