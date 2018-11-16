@@ -187,7 +187,7 @@ impl<'a> AstParser<'a> {
         loop {
             // determine which statements end with a `;` character
             let stmt_ends_in_eos = match self.ntok.unwrap() {
-                Token::Name(..) | Token::KwVar(..) | Token::KwRaise(..) |
+                Token::Name(..) | Token::KwVar(..) |
                 Token::KwContinue(..) | Token::KwBreak(..) | Token::KwReturn(..) |
                 Token::ParensOpen(..) => true,
                 _ => false
@@ -200,8 +200,6 @@ impl<'a> AstParser<'a> {
                 Token::KwLoop(..) => self.parse_loop_statement()?,
                 Token::KwFor(..) => unimplemented!(),
                 Token::KwReturn(..) => self.parse_return_statement()?,
-                Token::KwRaise(..) => self.parse_raise_statement()?,
-                Token::KwTry(..) => self.parse_try_statement()?,
                 Token::KwBreak(..) => self.parse_break_statement()?,
                 Token::KwContinue(..) => self.parse_continue_statement()?,
                 _ => self.parse_expression_statement()?,
@@ -414,88 +412,6 @@ impl<'a> AstParser<'a> {
             kind: StatementKind::Loop(loop_block),
             file_position: loop_pos
         }));
-    }
-
-    /// Parse a try-catch block.
-    fn parse_try_statement(&mut self) -> PR<Box<Statement>> {
-        self.consume_next(vec!["try"])?;
-
-        let try_pos = self.ctok.unwrap().get_file_position();
-        let (_, try_block) = self.parse_block(false)?;
-        let catch_statements = self.parse_catch_statements()?;
-        let finally_block = self.parse_finally_block()?;
-
-        return Ok(Box::new(Statement {
-            kind: StatementKind::Try(try_block, catch_statements, finally_block),
-            file_position: try_pos
-        }));
-    }
-
-    fn parse_catch_statements(&mut self) -> PR<Vec<Box<Statement>>> {
-        let mut catches: Vec<Box<Statement>> = Vec::new();
-
-        loop {
-            match self.ntok.unwrap() {
-                Token::KwCatch(..) => (),
-                _ => break
-            };
-
-            self.consume_next(vec!["catch"])?;
-
-            let catch_pos = self.ctok.unwrap().get_file_position();
-
-            self.consume_next(vec!["("])?;
-            self.consume_next(vec!["name"])?; // err type name
-
-            let (type_pos, type_name) = match self.ctok.unwrap() {
-                Token::Name(pos, n, _) => (pos.clone(), n.clone()),
-                _ => unreachable!()
-            };
-
-            let type_ident = Identifier {
-                identifier: type_name,
-                file_position: type_pos
-            };
-
-            self.consume_next(vec!["name"])?; // variable name to set for err
-
-            let (errvar_pos, errvar_name) = match self.ctok.unwrap() {
-                Token::Name(pos, _, n) => (pos.clone(), n.clone()),
-                _ => unreachable!()
-            };
-
-            let var_ident = Identifier {
-                identifier: errvar_name,
-                file_position: errvar_pos
-            };
-
-            self.consume_next(vec![")"])?;
-
-            let (_, catch_block) = self.parse_block(false)?;
-
-            let catch = Statement {
-                kind: StatementKind::Catch(type_ident, var_ident, catch_block),
-                file_position: catch_pos
-            };
-
-            catches.push(Box::new(catch));
-        }
-
-        return Ok(catches);
-    }
-
-    /// Parse a finally statement block.
-    fn parse_finally_block(&mut self) -> PR<Option<Box<Block>>> {
-        match self.ntok.unwrap() {
-            Token::KwFinally(..) => (),
-            _ => return Ok(None)
-        };
-
-        self.consume_next(vec!["finally"])?;
-
-        let (_, fin_block) = self.parse_block(false)?;
-
-        return Ok(Some(fin_block));
     }
 
     /// Parse an expression.

@@ -113,9 +113,6 @@ pub trait ParsesTokens {
             "pub" => Token::KwPublic(_f()),
             "break" => Token::KwBreak(_f()),
             "continue" => Token::KwContinue(_f()),
-            "try" => Token::KwTry(_f()),
-            "catch" => Token::KwCatch(_f()),
-            "raise" => Token::KwRaise(_f()),
             "eob" => Token::Eob,
             _ => Token::Eof(_f())
         };

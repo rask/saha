@@ -224,18 +224,6 @@ pub enum Token {
 
     /// `break` keyword.
     KwBreak(FilePosition),
-
-    /// `try` keyword.
-    KwTry(FilePosition),
-
-    /// `catch` keyword.
-    KwCatch(FilePosition),
-
-    /// `finally` keyword.
-    KwFinally(FilePosition),
-
-    /// `raise` keyword.
-    KwRaise(FilePosition),
 }
 
 impl Display for Token {
@@ -308,10 +296,6 @@ impl Display for Token {
             Token::KwPublic(_) => "Keyword [public]".to_string(),
             Token::KwBreak(_) => "Keyword [break]".to_string(),
             Token::KwContinue(_) => "Keyword [continue]".to_string(),
-            Token::KwTry(_) => "Keyword [try]".to_string(),
-            Token::KwCatch(_) => "Keyword [catch]".to_string(),
-            Token::KwFinally(_) => "Keyword [finally]".to_string(),
-            Token::KwRaise(_) => "Keyword [raise]".to_string(),
         };
 
         write!(f, "{:?}", variant)
@@ -414,10 +398,6 @@ impl Token {
             Token::KwPublic(f, ..) => f.clone(),
             Token::KwContinue(f, ..) => f.clone(),
             Token::KwBreak(f, ..) => f.clone(),
-            Token::KwTry(f, ..) => f.clone(),
-            Token::KwCatch(f, ..) => f.clone(),
-            Token::KwFinally(f, ..) => f.clone(),
-            Token::KwRaise(f, ..) => f.clone(),
         };
     }
 }
