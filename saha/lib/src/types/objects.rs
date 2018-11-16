@@ -449,7 +449,7 @@ impl SahaObject for UserInstance {
             call_args.insert("self".to_string(), Value::obj(self.get_instance_ref()));
         }
 
-        return member_callable.call(call_args, Some(actual_return_type), access_pos.clone());
+        return member_callable.call(call_args, Some(actual_return_type), Vec::new(), access_pos.clone());
     }
 
     fn access_property(&self, access: AccessParams) -> SahaCallResult {

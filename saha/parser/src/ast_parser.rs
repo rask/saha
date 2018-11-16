@@ -330,19 +330,6 @@ impl<'a> AstParser<'a> {
         }));
     }
 
-    /// Parse an error raise statement.
-    fn parse_raise_statement(&mut self) -> PR<Box<Statement>> {
-        self.consume_next(vec!["raise"])?;
-
-        let raise_pos = self.ctok.unwrap().get_file_position();
-        let raised = self.parse_expression(0)?;
-
-        return Ok(Box::new(Statement {
-            kind: StatementKind::Raise(raised),
-            file_position: raise_pos
-        }));
-    }
-
     /// Parse if-elseif-else statements.
     fn parse_if_statement(&mut self) -> PR<Box<Statement>> {
         self.consume_next(vec!["if"])?;

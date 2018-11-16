@@ -972,7 +972,7 @@ impl<'a> AstVisitor<'a> {
 
         let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
 
-        return func.call(call_args, None, Some(callable.file_position.clone()));
+        return func.call(call_args, None, Vec::new(), Some(callable.file_position.clone()));
     }
 
     /// Call an object method.
@@ -1029,6 +1029,11 @@ impl<'a> AstVisitor<'a> {
                 obj.call_value_method(&callable.file_position, access_kind, &callable.identifier, &call_args)
             }
         }
+    }
+
+    /// Call an instance method.
+    fn call_instance_member(&mut self, method_ref: Box<dyn SahaCallable>, access: AccessParams, args: SahaFunctionArguments) -> AstResult {
+        unimplemented!()
     }
 
     /// Visit a newup expression.

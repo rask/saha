@@ -44,7 +44,7 @@ pub trait ValidatesArgs {
 /// Anything which can be called in Saha. Functions and methods mainly.
 pub trait SahaCallable: Send + Sync {
     /// Call this callable.
-    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, call_source_position: Option<FilePosition>) -> SahaCallResult;
+    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult;
 
     /// Get the parameters that this callable accepts.
     fn get_parameters(&self) -> SahaFunctionParamDefs;
@@ -121,7 +121,7 @@ pub struct UserFunction {
 }
 
 impl SahaCallable for CoreFunction {
-    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, call_source_position: Option<FilePosition>) -> SahaCallResult {
+    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(&args, &call_source_position)?;
 
         let ret_type = match &return_type {
@@ -230,7 +230,7 @@ impl SahaCallable for CoreFunction {
 }
 
 impl SahaCallable for UserFunction {
-    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, call_source_position: Option<FilePosition>) -> SahaCallResult {
+    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(&args, &call_source_position)?;
 
         let ret_type = match &return_type {
