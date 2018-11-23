@@ -508,12 +508,62 @@ impl<'a> AstParser<'a> {
 
     /// Parse bracedelimited list creation expression.
     fn parse_list_creation_shorthand(&mut self) -> PR<Box<Expression>> {
-        unimplemented!()
+        let list_pos = self.ctok.unwrap().get_file_position();
+        let mut list_expr: Vec<Box<Expression>> = Vec::new();
+
+        loop {
+            list_expr.push(self.parse_expression(0)?);
+
+            match self.ntok.unwrap() {
+                Token::Comma(..) => {
+                    self.consume_next(vec![","])?;
+
+                    continue
+                },
+                Token::BraceClose(..) => break,
+                _ => continue
+            };
+        }
+
+        self.consume_next(vec!["]"])?;
+
+        return Ok(Box::new(Expression {
+            kind: ExpressionKind::ListDeclaration(list_expr),
+            file_position: list_pos
+        }));
     }
 
     /// Parse curlybracedelimited dict creation expression.
     fn parse_dict_creation_shorthand(&mut self) -> PR<Box<Expression>> {
-        unimplemented!()
+        let dict_pos = self.ctok.unwrap().get_file_position();
+        let mut dict_expr: Vec<(Box<Expression>, Box<Expression>)> = Vec::new();
+
+        loop {
+            let key = self.parse_expression(0)?;
+
+            self.consume_next(vec![":"])?;
+
+            let value = self.parse_expression(0)?;
+
+            dict_expr.push((key, value));
+
+            match self.ntok.unwrap() {
+                Token::Comma(..) => {
+                    self.consume_next(vec![","])?;
+
+                    continue
+                },
+                Token::CurlyClose(..) => break,
+                _ => continue
+            };
+        }
+
+        self.consume_next(vec!["}"])?;
+
+        return Ok(Box::new(Expression {
+            kind: ExpressionKind::DictDeclaration(dict_expr),
+            file_position: dict_pos
+        }));
     }
 
     /// Parse an assignment expression.

@@ -24,6 +24,7 @@ pub fn register_stdlib() {
     }
 
     register_list_class();
+    register_dict_class();
     register_result_class();
 }
 
@@ -32,6 +33,13 @@ fn register_list_class() {
     let mut st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
 
     st.core_classes.insert("List".to_string(), globals::list::new_instance);
+}
+
+/// Register the stdlib Dict type.
+fn register_dict_class() {
+    let mut st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+    st.core_classes.insert("Dict".to_string(), globals::dict::new_instance);
 }
 
 /// Register the stdlib Result type.

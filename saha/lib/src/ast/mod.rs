@@ -167,7 +167,7 @@ pub enum ExpressionKind {
     /// ```saha
     /// {key: value, ...}
     /// ```
-    DictionaryDeclaration(Vec<(Box<Expression>, Box<Expression>)>),
+    DictDeclaration(Vec<(Box<Expression>, Box<Expression>)>),
 
     /// Assignment. `name = expr`.
     AssignOperation(Box<Expression>, Box<Expression>),
