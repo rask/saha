@@ -215,6 +215,58 @@ impl<'a> AstParser<'a> {
         return Ok(statements);
     }
 
+    /// Parse a type declaration.
+    fn parse_type_declaration(&mut self, parse_param_types: bool) -> PR<Box<SahaType>> {
+        self.consume_next(vec!["name", "typestring", "typeboolean", "typeinteger", "typefloat"])?;
+
+        let typ = match self.ctok.unwrap() {
+            Token::TypeBoolean(..) => SahaType::Bool,
+            Token::TypeString(..) => SahaType::Str,
+            Token::TypeInteger(..) => SahaType::Int,
+            Token::TypeFloat(..) => SahaType::Float,
+            Token::Name(_, n, _) => {
+                if parse_param_types && self.validate_paramtype_name(&n) {
+                    SahaType::TypeParam(n.to_owned().chars().nth(0).unwrap())
+                } else {
+                    let mut type_params = Vec::new();
+
+                    match self.ntok.unwrap() {
+                        Token::OpLt(..) => {
+                            // parse type parameters
+                            self.consume_next(vec!["<"])?;
+
+                            'gens: loop {
+                                // parse with recursion, in case subtypes are generic as well
+                                type_params.push(self.parse_type_declaration(parse_param_types)?);
+
+                                // see if we have a list of comma separated types, then continue
+                                // or break the loop
+                                match self.ntok.unwrap() {
+                                    Token::Comma(..) => {
+                                        self.consume_next(vec![","])?;
+
+                                        continue 'gens
+                                    },
+                                    _ => break 'gens
+                                };
+                            };
+
+                            self.consume_next(vec![">"])?;
+
+                            SahaType::Name(n.to_owned(), type_params)
+                        },
+                        _ => {
+                            SahaType::Name(n.to_owned(), type_params)
+                        }
+                    }
+                }
+            },
+            _ => unreachable!()
+        };
+
+        return Ok(Box::new(typ));
+    }
+
     /// Parse a variable declaration.
     fn parse_variable_declaration_statement(&mut self) -> PR<Box<Statement>> {
         self.consume_next(vec!["var"])?;
@@ -233,25 +285,14 @@ impl<'a> AstParser<'a> {
 
         let identifier = Identifier {
             file_position: ident_pos.to_owned(),
-            identifier: ident_val.to_owned()
+            identifier: ident_val.to_owned(),
+            type_params: Vec::new()
         };
 
         // variable type
         self.consume_next(vec!["'"])?;
-        self.consume_next(vec!["name", "str", "int", "float", "bool"])?;
 
-        let var_type = match self.ctok.unwrap() {
-            Token::TypeBoolean(..) => SahaType::Bool,
-            Token::TypeInteger(..) => SahaType::Int,
-            Token::TypeFloat(..) => SahaType::Float,
-            Token::TypeString(..) => SahaType::Str,
-            Token::Name(_, alias, _) => SahaType::Name(alias.to_owned()),
-            _ => unreachable!()
-        };
-
-        if let Token::OpLt(..) = self.ntok.unwrap() {
-            let paramtypes = self.parse_new_instance_type_params()?;
-        }
+        let var_type = self.parse_type_declaration(true)?;
 
         // if we don't have an assignment we return an uninited variable
         if let Token::EndStatement(..) = self.ntok.unwrap() {
@@ -440,8 +481,8 @@ impl<'a> AstParser<'a> {
 
                 expr
             },
-            Token::BraceOpen(..) => unimplemented!(),
-            Token::CurlyOpen(..) => unimplemented!(),
+            Token::BraceOpen(..) => self.parse_list_creation_shorthand()?,
+            Token::CurlyOpen(..) => self.parse_dict_creation_shorthand()?,
             Token::UnOpNot(..)
             | Token::OpSub(..) => self.parse_unop_expression()?,
             Token::StringValue(..)
@@ -463,6 +504,16 @@ impl<'a> AstParser<'a> {
         };
 
         return Ok(primary);
+    }
+
+    /// Parse bracedelimited list creation expression.
+    fn parse_list_creation_shorthand(&mut self) -> PR<Box<Expression>> {
+        unimplemented!()
+    }
+
+    /// Parse curlybracedelimited dict creation expression.
+    fn parse_dict_creation_shorthand(&mut self) -> PR<Box<Expression>> {
+        unimplemented!()
     }
 
     /// Parse an assignment expression.
@@ -586,15 +637,25 @@ impl<'a> AstParser<'a> {
         return Ok(Box::new(val_expr));
     }
 
+    /// Parse a path of identifiers separated by `->` or `::`.
     fn parse_ident_path(&mut self) -> PR<Box<Expression>> {
         let curtok = self.ctok.unwrap();
         let mut path_items: Vec<(AccessKind, Identifier)> = Vec::new();
 
         let root: Identifier = match curtok {
             Token::Name(pos, alias, _) => {
+                let typeparams: Vec<Box<SahaType>>;
+
+                if let Token::OpLt(..) = self.ntok.unwrap() {
+                    typeparams = self.parse_new_instance_type_params()?;
+                } else {
+                    typeparams = Vec::new();
+                }
+
                 Identifier {
                     file_position: pos.clone(),
-                    identifier: alias.to_string()
+                    identifier: alias.to_string(),
+                    type_params: typeparams
                 }
             },
             _ => return Err(ParseError::new(
@@ -620,9 +681,18 @@ impl<'a> AstParser<'a> {
 
             let item_ident: Identifier = match self.ctok.unwrap() {
                 Token::Name(pos, alias, _) => {
+                    let typeparams: Vec<Box<SahaType>>;
+
+                    if let Token::OpLt(..) = self.ntok.unwrap() {
+                        typeparams = self.parse_new_instance_type_params()?;
+                    } else {
+                        typeparams = Vec::new();
+                    }
+
                     Identifier {
                         file_position: pos.clone(),
-                        identifier: alias.to_string()
+                        identifier: alias.to_string(),
+                        type_params: Vec::new()
                     }
                 },
                 _ => unreachable!()
@@ -717,7 +787,8 @@ impl<'a> AstParser<'a> {
             file_position: argpos.clone(),
             kind: ExpressionKind::CallableArg(Identifier {
                 file_position: argpos.clone(),
-                identifier: argname.clone()
+                identifier: argname.clone(),
+                type_params: Vec::new()
             },
             arg_value_expr)
         }));
@@ -734,7 +805,7 @@ impl<'a> AstParser<'a> {
             _ => unreachable!()
         };
 
-        let typeparams: Vec<SahaType>;
+        let typeparams: Vec<Box<SahaType>>;
 
         if let Token::OpLt(..) = self.ntok.unwrap() {
             typeparams = self.parse_new_instance_type_params()?;
@@ -753,7 +824,8 @@ impl<'a> AstParser<'a> {
             kind: ExpressionKind::NewInstance(
                 Identifier {
                     file_position: cname_pos.clone(),
-                    identifier: cname.clone()
+                    identifier: cname.clone(),
+                    type_params: Vec::new()
                 },
                 newup_args,
                 typeparams
@@ -776,24 +848,15 @@ impl<'a> AstParser<'a> {
     }
 
     /// Parse instance newup type param declarations.
-    fn parse_new_instance_type_params(&mut self) -> PR<Vec<SahaType>> {
-        let mut tparams: Vec<SahaType> = Vec::new();
+    fn parse_new_instance_type_params(&mut self) -> PR<Vec<Box<SahaType>>> {
+        let mut tparams: Vec<Box<SahaType>> = Vec::new();
 
         self.consume_next(vec!["<"])?;
 
         let tparams_pos = self.ctok.unwrap().get_file_position();
 
         loop {
-            self.consume_next(vec!["name", "str", "int", "float", "bool"])?;
-
-            let ty = match self.ctok.unwrap() {
-                Token::Name(_, n, _) => SahaType::Name(n.to_string()),
-                Token::TypeInteger(_) => SahaType::Int,
-                Token::TypeFloat(_) => SahaType::Float,
-                Token::TypeString(_) => SahaType::Str,
-                Token::TypeBoolean(_) => SahaType::Bool,
-                _ => unreachable!()
-            };
+            let ty = self.parse_type_declaration(false)?;
 
             tparams.push(ty);
 
@@ -878,10 +941,11 @@ mod tests {
             StatementKind::VarDeclaration(ref ident, ref vartype, ref value) => {
                 assert_eq!(Identifier {
                     file_position: testfilepos(),
-                    identifier: "foo".to_string()
+                    identifier: "foo".to_string(),
+                    type_params: Vec::new()
                 }, ident.to_owned());
 
-                assert_eq!(SahaType::Str, vartype.to_owned());
+                assert_eq!(Box::new(SahaType::Str), vartype.to_owned());
 
                 assert_eq!(Box::new(Expression {
                     file_position: testfilepos(),

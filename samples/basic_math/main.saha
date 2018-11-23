@@ -2,14 +2,14 @@
 function main() int
 {
     var first'int = (1 + 2 * 2 + 1 + 2 / 2 + 1) / 2;
-    var fstr'str = first->to_string();
+    var fstr'str = first->toString();
 
     var to_print'str = "should be 4: (1 + 2 * 2 + 1 + 2 / 2 + 1) / 2 = " + fstr;
 
     print_line(text = to_print);
 
     first = 1 + 2 + 3;
-    fstr = first->to_string();
+    fstr = first->toString();
     to_print = "should be 6: 1 + 2 + 3 = " + fstr;
 
     print_line(text = to_print);

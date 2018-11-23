@@ -1,11 +1,13 @@
 function main() int
 {
-    var res'Result<int, bool> = Result::ok(value = 2);
+    var res'Result<int, bool> = new Result<int, bool>();
+
+    res->succeed(value = 2);
 
     var success'int;
     var failed'bool;
 
-    if (res->succeeded()) {
+    if (res->is_success()) {
         success = res->unwrap();
         failed = false;
     } else {

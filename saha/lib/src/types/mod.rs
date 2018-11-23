@@ -41,29 +41,31 @@ lazy_static! {
 /// Saha types.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SahaType {
-    /// Strings
+    /// Strings.
     Str,
 
-    /// Integers
+    /// Integers.
     Int,
 
-    /// Floats
+    /// Floats.
     Float,
 
-    /// Booleans
+    /// Booleans.
     Bool,
 
     /// Object instance references, instances are stored in the global symbol
-    /// table
+    /// table.
     Obj,
 
-    /// Names, which should be resolved to other types
-    Name(String),
+    /// Names, which could be resolved to other types. Additionally stores
+    /// type params/generic type data inside a vec. Type params are boxed in
+    /// case they contain inner type params as well.
+    Name(String, Vec<Box<SahaType>>),
 
     /// Type parameter, consisting of a single uppercase character.
     TypeParam(char),
 
-    /// Internal void type
+    /// Internal void type.
     Void,
 }
 
@@ -75,7 +77,13 @@ impl SahaType {
             SahaType::Str => "str".to_string(),
             SahaType::Int => "int".to_string(),
             SahaType::Float => "float".to_string(),
-            SahaType::Name(n) => n.to_owned(),
+            SahaType::Name(n, tp) => {
+                if tp.len() == 0 {
+                    n.to_owned()
+                } else {
+                    format!("{}<{:?}>", n.to_owned(), tp)
+                }
+            },
             SahaType::Obj => "object".to_string(),
             SahaType::TypeParam(c) => format!("Type param {}", c),
             _ => "void".to_string()
@@ -83,10 +91,28 @@ impl SahaType {
     }
 }
 
+impl From<Value> for SahaType {
+    fn from(value: Value) -> SahaType {
+        return *value.kind;
+    }
+}
+
+impl<'a> From<&'a Value> for SahaType {
+    fn from(value: &'a Value) -> SahaType {
+        return *value.kind.clone();
+    }
+}
+
+impl<T> PartialEq<T> for SahaType where for<'a> SahaType: From<&'a T> {
+    fn eq(&self, other: &T) -> bool {
+        return self == &SahaType::from(other);
+    }
+}
+
 /// A Saha value object.
 #[derive(Clone)]
 pub struct Value {
-    pub kind: SahaType,
+    pub kind: Box<SahaType>,
     pub str: Option<String>,
     pub int: Option<isize>,
     pub float: Option<R64>,
@@ -98,20 +124,20 @@ pub struct Value {
 
 impl PartialEq for Value {
     fn eq(&self, other: &Value) -> bool {
-        return match self.kind {
-            SahaType::Bool => self.bool == other.bool,
-            SahaType::Str => self.str == other.str,
-            SahaType::Int => self.int == other.int,
-            SahaType::Float => self.float == other.float,
-            SahaType::Name(ref n) => match other.kind {
-                SahaType::Name(ref on) => n == on,
-                _ => false
+        let st = self.kind.clone();
+        let ot = other.kind.clone();
+
+        match (*st, *ot) {
+            (SahaType::Bool, SahaType::Bool) => self.bool.unwrap() == other.bool.unwrap(),
+            (SahaType::Str, SahaType::Str) => self.str.clone().unwrap() == other.str.clone().unwrap(),
+            (SahaType::Int, SahaType::Int) => self.int.unwrap() == other.int.unwrap(),
+            (SahaType::Float, SahaType::Float) => self.float.unwrap() == other.float.unwrap(),
+            (SahaType::Obj, SahaType::Obj) => self.obj.unwrap() == other.obj.unwrap(),
+            (SahaType::Void, SahaType::Void) => true,
+            (SahaType::Name(ln, ltp), SahaType::Name(rn, rtp)) => {
+                // classname and type params must match
+                ln == rn && ltp == rtp
             },
-            SahaType::Obj => self.obj == other.obj,
-            SahaType::Void => match other.kind {
-                SahaType::Void => true,
-                _ => false
-            }
             _ => false
         }
     }
@@ -122,7 +148,7 @@ impl Eq for Value {}
 impl Default for Value {
     fn default() -> Value {
         return Value {
-            kind: SahaType::Void,
+            kind: Box::new(SahaType::Void),
             str: None,
             bool: None,
             int: None,
@@ -138,13 +164,19 @@ impl Debug for Value {
     fn fmt(&self, f: &mut FmtFormatter) -> FmtResult {
         let k = self.kind.clone();
 
-        let value_str = match k {
+        let value_str = match *k {
             SahaType::Void => "void".to_string(),
             SahaType::Int => format!("{}", self.int.unwrap()),
             SahaType::Float => format!("{}", self.float.unwrap()),
             SahaType::Bool => format!("{}", self.bool.unwrap()),
             SahaType::Str => (self.str).clone().unwrap(),
-            SahaType::Name(n) => n.to_owned(),
+            SahaType::Name(n, tp) => {
+                if tp.len() == 0 {
+                    n.to_owned()
+                } else {
+                    format!("{}<{:?}>", n.to_owned(), tp)
+                }
+            },
             SahaType::Obj => format!("{:?}", self.obj.unwrap()),
             SahaType::TypeParam(c) => format!("TypeParam {}", c)
         };
@@ -163,7 +195,7 @@ impl Value {
     pub fn int(int: isize) -> Value {
         let mut v = Value::new();
 
-        v.kind = SahaType::Int;
+        v.kind = Box::new(SahaType::Int);
         v.int = Some(int);
 
         return v;
@@ -173,7 +205,7 @@ impl Value {
     pub fn float(float: R64) -> Value {
         let mut v = Value::new();
 
-        v.kind = SahaType::Float;
+        v.kind = Box::new(SahaType::Float);
         v.float = Some(float);
 
         return v;
@@ -183,7 +215,7 @@ impl Value {
     pub fn str(string: String) -> Value {
         let mut v = Value::new();
 
-        v.kind = SahaType::Str;
+        v.kind = Box::new(SahaType::Str);
         v.str = Some(string);
 
         return v;
@@ -193,17 +225,17 @@ impl Value {
     pub fn bool(boolean: bool) -> Value {
         let mut v = Value::new();
 
-        v.kind = SahaType::Bool;
+        v.kind = Box::new(SahaType::Bool);
         v.bool = Some(boolean);
 
         return v;
     }
 
     /// Create a new name value.
-    pub fn name(name: String) -> Value {
+    pub fn name(name: String, type_params: Vec<Box<SahaType>>) -> Value {
         let mut v = Value::new();
 
-        v.kind = SahaType::Name(name.to_owned());
+        v.kind = Box::new(SahaType::Name(name.to_owned(), type_params));
         v.name = Some(name);
 
         return v;
@@ -213,7 +245,7 @@ impl Value {
     pub fn obj(inst: InstRef) -> Value {
         let mut v = Value::new();
 
-        v.kind = SahaType::Obj;
+        v.kind = Box::new(SahaType::Obj);
         v.obj = Some(inst);
 
         return v;
@@ -225,7 +257,7 @@ impl Value {
     }
 
     pub fn call_value_method(&self, call_pos: &FilePosition, _: &AccessKind, method_name: &String, args: &SahaFunctionArguments) -> SahaCallResult {
-        let valuemethods = match self.kind {
+        let valuemethods = match *self.kind {
             SahaType::Int => int_methods.clone(),
             SahaType::Str => str_methods.clone(),
             _ => unimplemented!()
@@ -233,7 +265,7 @@ impl Value {
 
         if valuemethods.contains_key(method_name) == false {
             let err = RuntimeError::new(
-                &format!("No method `{}` defined for type `{:?}`", method_name, self.kind),
+                &format!("No method `{}` defined for type `{:?}`", method_name, *self.kind),
                 Some(call_pos.clone())
             );
 
@@ -261,8 +293,9 @@ mod tests {
             (Value::bool(true), Value::bool(true), true),
             (Value::str("asdf".to_string()), Value::str("qwer".to_string()), false),
             (Value::str("asdf".to_string()), Value::str("asdf".to_string()), true),
-            (Value::name("Hello".to_string()), Value::name("Hello".to_string()), true),
-            (Value::name("Hello".to_string()), Value::name("notHello".to_string()), false),
+            (Value::name("Hello".to_string(), Vec::new()), Value::name("Hello".to_string(), Vec::new()), true),
+            (Value::name("Hello".to_string(), Vec::new()), Value::name("Hello".to_string(), Vec::new(SahaType::Int)), false),
+            (Value::name("Hello".to_string(), Vec::new()), Value::name("notHello".to_string(), Vec::new()), false),
         ];
 
         for (one, two, res) in test_vals {

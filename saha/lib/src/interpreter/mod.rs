@@ -34,13 +34,13 @@ type BailableAstResult = Result<(Value, bool), RuntimeError>;
 pub struct AstVisitor<'a> {
     ast: &'a Ast,
     self_ref: Option<InstRef>,
-    local_refs: HashMap<String, (SahaType, Value)>
+    local_refs: HashMap<String, (Box<SahaType>, Value)>
 }
 
 impl<'a> AstVisitor<'a> {
     /// Get a new AstVisitor instance for an AST.
     pub fn new(ast: &'a Ast, visit_args: SahaFunctionArguments) -> AstVisitor<'a> {
-        let mut inject_local_refs: HashMap<String, (SahaType, Value)> = HashMap::new();
+        let mut inject_local_refs: HashMap<String, (Box<SahaType>, Value)> = HashMap::new();
         let mut self_ref: Option<InstRef> = None;
 
         for (k, v) in visit_args {
@@ -74,14 +74,51 @@ impl<'a> AstVisitor<'a> {
         return impl_list;
     }
 
+    /// Get object instance type parameters.
+    fn get_object_type_params(&self, obj: &Value) -> Vec<(char, Box<SahaType>)> {
+        let instref = obj.obj.unwrap();
+        let instmutex: Arc<Mutex<Box<dyn SahaObject>>> = crate::SAHA_SYMBOL_TABLE.lock().unwrap().instances.get(&instref).unwrap().clone();
+
+        let inst = instmutex.lock().unwrap();
+
+        return inst.get_type_params();
+    }
+
+    /// Gets the available type parameter slots for a class using class name.
+    fn get_class_type_params(&self, class_name: &String) -> Vec<char> {
+        let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+        let classdef = st.classes.get(class_name).unwrap().clone();
+
+        return classdef.type_params.clone().into_iter().map(|(c, _)| c).collect();
+    }
+
+    fn get_object_named_type(&self, obj: &Value) -> Box<SahaType> {
+        let instref = obj.obj.unwrap();
+        let instmutex: Arc<Mutex<Box<dyn SahaObject>>> = crate::SAHA_SYMBOL_TABLE.lock().unwrap().instances.get(&instref).unwrap().clone();
+
+        let inst = instmutex.lock().unwrap();
+
+        return inst.get_named_type();
+    }
+
+    /// Does a value match a type?
     fn is_matching_type(&self, expected: &SahaType, value: &Value) -> bool {
-        let is_match = match (expected, &value.kind) {
+        let is_match = match (expected, *value.kind.clone()) {
             (SahaType::Bool, SahaType::Bool) => true,
             (SahaType::Str, SahaType::Str) => true,
             (SahaType::Int, SahaType::Int) => true,
             (SahaType::Float, SahaType::Float) => true,
-            (SahaType::Name(ref exp_name), SahaType::Name(ref act_name)) => exp_name == act_name,
-            (SahaType::Name(exp_name), SahaType::Obj) => self.get_object_implements(&value).contains(exp_name),
+            (SahaType::Name(ref exp_name, ref exp_tp), SahaType::Name(ref act_name, ref act_tp)) => exp_name == act_name && exp_tp == act_tp,
+            (SahaType::Name(exp_name, exp_tp), SahaType::Obj) => {
+                let impl_list = self.get_object_implements(&value);
+                let inst_typedname = self.get_object_named_type(&value);
+
+                if impl_list.contains(exp_name) == false {
+                    return false;
+                }
+
+                *expected == *inst_typedname
+            },
             _ => false
         };
 
@@ -89,7 +126,7 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Create a local reference value.
-    fn create_local_ref(&mut self, name: String, value: (SahaType, Value), refpos: &FilePosition) -> AstResult {
+    fn create_local_ref(&mut self, name: String, value: (Box<SahaType>, Value), refpos: &FilePosition) -> AstResult {
         if self.local_refs.get(&name).is_some() {
             let err = RuntimeError::new(&format!("Cannot redeclare variable `{}`", name), Some(refpos.clone()));
 
@@ -144,7 +181,7 @@ impl<'a> AstVisitor<'a> {
 
         let (_, value) = val.unwrap();
 
-        if value.kind == SahaType::Void {
+        if value.kind == Box::new(SahaType::Void) {
             let err = RuntimeError::new(&format!("Cannot access uninitialized variable `{}`", name), Some(refpos.clone()));
 
             return Err(err);
@@ -256,7 +293,7 @@ impl<'a> AstVisitor<'a> {
             }
         }
 
-        self.create_local_ref(refname, (var_type.to_owned(), default_value), refpos)?;
+        self.create_local_ref(refname, (Box::new(var_type.to_owned()), default_value), refpos)?;
 
         return Ok(Value::void());
     }
@@ -274,7 +311,7 @@ impl<'a> AstVisitor<'a> {
         let cond_value = self.visit_expression(if_cond)?;
         let cond_pos = if_cond.file_position.clone();
 
-        let condition_bool: bool = match cond_value.kind {
+        let condition_bool: bool = match *cond_value.kind {
             SahaType::Bool => cond_value.bool.unwrap(),
             _ => {
                 let err = RuntimeError::new(
@@ -340,7 +377,7 @@ impl<'a> AstVisitor<'a> {
         let cond_value = self.visit_expression(cond)?;
         let cond_pos = cond.file_position.clone();
 
-        let condition_bool: bool = match cond_value.kind {
+        let condition_bool: bool = match *cond_value.kind {
             SahaType::Bool => cond_value.bool.unwrap(),
             _ => {
                 let err = RuntimeError::new(
@@ -396,15 +433,15 @@ impl<'a> AstVisitor<'a> {
 
     /// Visit a name assignment node.
     fn visit_assignment(&mut self, ident_path: &Box<Expression>, value_expr: &Box<Expression>) -> AstResult {
-        let (owner, access_kind, property) = self.resolve_ident_path(ident_path)?;
+        let (owner_inst, _, access_kind, property) = self.resolve_ident_path(ident_path)?;
         let value = self.visit_expression(value_expr)?;
 
-        if owner.is_none() {
+        if owner_inst.is_none() {
             // local ref assign
             return self.set_local_ref(property.identifier, value, &property.file_position);
         } else {
             // property assign
-            let obj = owner.unwrap();
+            let obj = owner_inst.unwrap();
 
             let inst_lockable = self.get_instance_lockable_ref(&obj.obj.unwrap(), property.file_position.clone())?;
 
@@ -426,13 +463,13 @@ impl<'a> AstVisitor<'a> {
 
     /// Visit and resolve an identifier path expression to a value.
     fn resolve_ident_path_to_value(&mut self, ident_path: &Box<Expression>) -> AstResult {
-        let (root, acckind, member) = self.resolve_ident_path(ident_path)?;
+        let (root_inst, _, acckind, member) = self.resolve_ident_path(ident_path)?;
 
-        if root.is_none() {
+        if root_inst.is_none() {
             return self.get_local_ref(member.identifier.clone(), &ident_path.file_position);
         }
 
-        let access_val: Value = self.access_object_property(root.unwrap(), acckind.unwrap_or(AccessKind::Instance), member)?;
+        let access_val: Value = self.access_object_property(root_inst.unwrap(), acckind.unwrap_or(AccessKind::Instance), member)?;
 
         return Ok(access_val);
     }
@@ -463,7 +500,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Float, SahaType::Float) => Value::float(lhs_value.float.unwrap() + rhs_value.float.unwrap()),
             (SahaType::Int, SahaType::Int) => Value::int(lhs_value.int.unwrap() + rhs_value.int.unwrap()),
             (SahaType::Str, SahaType::Str) => Value::str(format!("{}{}", lhs_value.str.unwrap(), rhs_value.str.unwrap())),
@@ -488,7 +525,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Float, SahaType::Float) => Value::float(lhs_value.float.unwrap() - rhs_value.float.unwrap()),
             (SahaType::Int, SahaType::Int) => Value::int(lhs_value.int.unwrap() - rhs_value.int.unwrap()),
             _ => {
@@ -512,7 +549,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Float, SahaType::Float) => Value::float(lhs_value.float.unwrap() * rhs_value.float.unwrap()),
             (SahaType::Int, SahaType::Int) => Value::int(lhs_value.int.unwrap() * rhs_value.int.unwrap()),
             _ => {
@@ -536,7 +573,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Float, SahaType::Float) => {
                 if rhs_value.float.unwrap() == r64(0.0) {
                     let err = RuntimeError::new("Division by zero", Some(op_pos.clone()));
@@ -576,7 +613,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() > rhs_value.int.unwrap()),
             (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() > rhs_value.float.unwrap()),
             _ => {
@@ -600,7 +637,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() >= rhs_value.int.unwrap()),
             (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() >= rhs_value.float.unwrap()),
             _ => {
@@ -624,7 +661,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() < rhs_value.int.unwrap()),
             (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() < rhs_value.float.unwrap()),
             _ => {
@@ -648,7 +685,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() <= rhs_value.int.unwrap()),
             (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() <= rhs_value.float.unwrap()),
             _ => {
@@ -672,7 +709,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() == rhs_value.int.unwrap()),
             (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() == rhs_value.float.unwrap()),
             (SahaType::Bool, SahaType::Bool) => Value::bool(lhs_value.bool.unwrap() == rhs_value.bool.unwrap()),
@@ -699,7 +736,7 @@ impl<'a> AstVisitor<'a> {
         let (lk, rk) = (lhs_value.kind, rhs_value.kind);
         let (lkstr, rkstr) = (format!("{:?}", lk), format!("{:?}", rk));
 
-        let new_val: Value = match (lk, rk) {
+        let new_val: Value = match (*lk, *rk) {
             (SahaType::Int, SahaType::Int) => Value::bool(lhs_value.int.unwrap() != rhs_value.int.unwrap()),
             (SahaType::Float, SahaType::Float) => Value::bool(lhs_value.float.unwrap() != rhs_value.float.unwrap()),
             (SahaType::Bool, SahaType::Bool) => Value::bool(lhs_value.bool.unwrap() != rhs_value.bool.unwrap()),
@@ -722,7 +759,7 @@ impl<'a> AstVisitor<'a> {
     fn visit_binop_and(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
         let lhs_value = self.visit_expression(lhs)?;
 
-        match lhs_value.kind {
+        match *lhs_value.kind {
             SahaType::Bool => {
                 if lhs_value.bool.unwrap() == false {
                     // lhs is false so no point attempting to parse the right side for no reason
@@ -740,7 +777,7 @@ impl<'a> AstVisitor<'a> {
 
         let rhs_value: Value = self.visit_expression(rhs)?;
 
-        match rhs_value.kind {
+        match *rhs_value.kind {
             SahaType::Bool => {
                 if rhs_value.bool.unwrap() == false {
                     // rhs is false so no matter what lhs was, we return false
@@ -762,7 +799,7 @@ impl<'a> AstVisitor<'a> {
     fn visit_binop_or(&mut self, lhs: &Box<Expression>, rhs: &Box<Expression>, op_pos: &FilePosition) -> AstResult {
         let lhs_value = self.visit_expression(lhs)?;
 
-        match lhs_value.kind {
+        match *lhs_value.kind {
             SahaType::Bool => {
                 if lhs_value.bool.unwrap() == true {
                     // lhs is true so no point attempting to parse the right side for no reason
@@ -780,7 +817,7 @@ impl<'a> AstVisitor<'a> {
 
         let rhs_value: Value = self.visit_expression(rhs)?;
 
-        match rhs_value.kind {
+        match *rhs_value.kind {
             SahaType::Bool => {
                 if rhs_value.bool.unwrap() == true {
                     // rhs is false so no matter what lhs was, we return false
@@ -803,7 +840,7 @@ impl<'a> AstVisitor<'a> {
 
         let new_val: Value = match unop.kind {
             UnaryOpKind::Not => {
-                if let SahaType::Bool = expr_value.kind {
+                if let SahaType::Bool = *expr_value.kind {
                     Value::bool(!expr_value.bool.unwrap())
                 } else {
                     let err = RuntimeError::new("Invalid unary negation operand, expected boolean", Some(unop.file_position.clone()));
@@ -812,11 +849,11 @@ impl<'a> AstVisitor<'a> {
                 }
             },
             UnaryOpKind::Minus => {
-                match expr_value.kind {
+                match *expr_value.kind {
                     SahaType::Int => Value::int(-expr_value.int.unwrap()),
                     SahaType::Float => Value::float(-expr_value.float.unwrap()),
                     _ => {
-                        let err = RuntimeError::new("Invalid unary minus operand, expected boolean", Some(unop.file_position.clone()));
+                        let err = RuntimeError::new("Invalid unary minus operand, expected int or float", Some(unop.file_position.clone()));
 
                         return Err(err);
                     }
@@ -829,19 +866,20 @@ impl<'a> AstVisitor<'a> {
 
     /// Visit a callable call.
     fn visit_callable_call(&mut self, ident_path: &Box<Expression>, args: &Box<Expression>) -> AstResult {
-        let (owner, acckind, callable) = self.resolve_ident_path(ident_path)?;
+        let (owner_inst, owner_class_name, acckind, callable) = self.resolve_ident_path(ident_path)?;
 
-        if owner.is_none() {
+        if owner_inst.is_none() && owner_class_name.is_none() {
             return self.call_function(&callable, args);
+        } else if owner_class_name.is_some() && acckind == Some(AccessKind::Static) {
+            return self.call_static_method_with_classname(&owner_class_name.unwrap(), &AccessKind::Static, &callable, args);
         } else {
-            // FIXME remove the default access kind and fail better
-            return self.call_method(&owner.unwrap(), &acckind.unwrap_or(AccessKind::Instance), &callable, args);
+            return self.call_method(&owner_inst.unwrap(), &acckind.unwrap_or(AccessKind::Instance), &callable, args);
         }
     }
 
     /// Resolve an identifier path. First tuple member is a instref value
     /// (optional), third is the method or property name.
-    fn resolve_ident_path(&mut self, path: &Box<Expression>) -> Result<(Option<Value>, Option<AccessKind>, Identifier), RuntimeError> {
+    fn resolve_ident_path(&mut self, path: &Box<Expression>) -> Result<(Option<Value>, Option<SahaType>, Option<AccessKind>, Identifier), RuntimeError> {
         let mut member: Identifier; // callable name
         let mut owner: Option<Value> = None; // instref
         let mut last_access_kind: Option<AccessKind> = None; // inst or static access?
@@ -851,8 +889,25 @@ impl<'a> AstVisitor<'a> {
                 if members.is_empty() {
                     member = root.clone();
                 } else {
+                    let mut maybe_a_static_class_call = false;
+
+                    if members.len() == 1 && members.first().unwrap().0 == AccessKind::Static {
+                        maybe_a_static_class_call = true;
+                    }
+
                     let mut memberpath = members.clone();
-                    let mut obj_being_accessed: Option<Value> = Some(self.resolve_local_name(&root)?);
+                    let resolved_local_value = self.resolve_local_name(&root);
+
+                    if resolved_local_value.is_err() && maybe_a_static_class_call {
+                        return Ok((
+                            None,
+                            Some(SahaType::Name(root.identifier.clone(), root.type_params.clone())),
+                            Some(AccessKind::Static),
+                            members.first().unwrap().1.clone()
+                        ));
+                    }
+
+                    let mut obj_being_accessed: Option<Value> = resolved_local_value.ok();
 
                     loop {
                         let (acckind, mname) = memberpath.remove(0);
@@ -871,7 +926,7 @@ impl<'a> AstVisitor<'a> {
             _ => unreachable!()
         }
 
-        return Ok((owner, last_access_kind, member));
+        return Ok((owner, None, last_access_kind, member));
     }
 
     /// Visit a generic object access expression.
@@ -880,11 +935,11 @@ impl<'a> AstVisitor<'a> {
 
         match &rhs_expr.kind {
             ExpressionKind::FunctionCall(identpath, call_args) => {
-                let (_, _, ident) = self.resolve_ident_path(&identpath)?;
+                let (_, _, _, ident) = self.resolve_ident_path(&identpath)?;
                 self.call_method(&lhs_value, &access_kind, &ident, &call_args)
             },
             ExpressionKind::IdentPath(..) => {
-                let (_, _, ident) = self.resolve_ident_path(rhs_expr)?;
+                let (_, _, _, ident) = self.resolve_ident_path(rhs_expr)?;
                 self.access_object_property(lhs_value, access_kind.clone(), ident)
             },
             _ => unimplemented!()
@@ -893,7 +948,7 @@ impl<'a> AstVisitor<'a> {
 
     /// Access an object property and get the value it contains.
     fn access_object_property(&mut self, obj: Value, access_kind: AccessKind, property_name: Identifier) -> AstResult {
-        match obj.kind {
+        match *obj.kind {
             SahaType::Obj => (),
             _ => {
                 let err = RuntimeError::new(
@@ -977,7 +1032,7 @@ impl<'a> AstVisitor<'a> {
 
     /// Call an object method.
     fn call_method(&mut self, obj: &Value, access_kind: &AccessKind, callable: &Identifier, args: &Box<Expression>) -> AstResult {
-        match &obj.kind {
+        match *obj.kind {
             SahaType::Void => {
                 let err = RuntimeError::new("Cannot access property or call method on a void value", Some(callable.file_position.clone()));
 
@@ -1027,7 +1082,7 @@ impl<'a> AstVisitor<'a> {
                     inst_tparams = instance.get_type_params();
                 }
 
-                self.call_instance_member(instref,  method_ref, access, call_args, inst_tparams, fqname)
+                self.call_instance_member(Some(instref),  method_ref, access, call_args, inst_tparams, fqname)
             },
             _ => {
                 let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
@@ -1037,37 +1092,109 @@ impl<'a> AstVisitor<'a> {
         }
     }
 
+    /// Call a static method with just the class name, no instance.
+    fn call_static_method_with_classname(
+        &mut self,
+        class: &SahaType,
+        access_kind: &AccessKind,
+        callable: &Identifier,
+        args: &Box<Expression>
+    ) -> AstResult {
+        unimplemented!("Static access is not ready");
+
+        let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
+
+        let memberpos = callable.file_position.clone();
+        let membername = callable.identifier.clone();
+
+        if let SahaType::Name(ref n, ref ty) = *class {
+            let static_method_name = format!("{}#{}", n, membername);
+            let method_ref: Arc<Box<dyn SahaCallable>>;
+            let call_ty: Vec<(char, Box<SahaType>)>;
+
+            let access = AccessParams {
+                is_static_access: true,
+                member_name: &membername,
+                accessor_instref: &self.self_ref.clone(),
+                access_file_pos: &Some(memberpos.clone())
+            };
+
+            {
+                let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+                if st.classes.contains_key(n) == false && st.core_classes.contains_key(n) == false {
+                    let err = RuntimeError::new(&format!("Cannot call method of unknown class `{}`", n), Some(memberpos.clone()));
+
+                    return Err(err);
+                }
+
+                if st.methods.contains_key(&static_method_name) == false {
+                    let err = RuntimeError::new(
+                        &format!("No method `{}` defined in class `{}`", membername, n),
+                        Some(memberpos)
+                    );
+
+                    return Err(err);
+                }
+
+                let class_ty = self.get_class_type_params(n);
+
+                call_ty = class_ty.into_iter().zip(ty.clone().into_iter()).collect::<Vec<(char, Box<SahaType>)>>();
+                method_ref = Arc::clone(st.methods.get(&static_method_name).unwrap());
+            }
+
+            return self.call_instance_member(
+                None,
+                method_ref,
+                access,
+                call_args,
+                call_ty,
+                n.to_string()
+            );
+        } else {
+            let err = RuntimeError::new(
+                &format!("Cannot call static method `{}` of value `{}`", membername, class.to_readable_string()),
+                Some(memberpos)
+            );
+
+            return Err(err);
+        }
+    }
+
     /// Call an instance method.
     fn call_instance_member(
         &mut self,
-        instref: InstRef,
+        instref: Option<InstRef>,
         method_ref: Arc<Box<dyn SahaCallable>>,
         access: AccessParams,
         args: SahaFunctionArguments,
-        type_params: Vec<(char, SahaType)>,
+        type_params: Vec<(char, Box<SahaType>)>,
         classname: String
     ) -> AstResult {
         let member = access.member_name;
         let access_pos = access.access_file_pos;
         let static_access = access.is_static_access;
         let accessor_instref = access.accessor_instref;
+        let mut is_self_internal_call = false;
 
-        let is_self_internal_call = match accessor_instref {
-            Some(iref) => instref == *iref,
-            _ => false
-        };
+        if instref.is_some() {
+            is_self_internal_call = match accessor_instref {
+                Some(iref) => instref.unwrap() == *iref,
+                _ => false
+            };
+        }
 
         let member_is_static = method_ref.is_static();
         let member_is_public = method_ref.is_public();
         let typeparammap: HashMap<_, _> = type_params.into_iter().collect();
         let member_ret_type = method_ref.get_return_type();
 
-        let actual_return_type: SahaType = match member_ret_type {
+        let actual_return_type: Box<SahaType> = match *member_ret_type {
             SahaType::TypeParam(ty) => {
-                let maybe_ty = typeparammap.get(&ty).unwrap_or(&SahaType::Void);
+                let maybe_ty = typeparammap.get(&ty).unwrap_or(&Box::new(SahaType::Void)).clone();
 
-                match maybe_ty {
-                    SahaType::Void => {
+                match maybe_ty == Box::new(SahaType::Void) {
+                    true => {
                         let err = RuntimeError::new(
                             &format!("Method `{}` on class `{}` expects a type parameter `{}`, but none was defined", member, classname, ty),
                             access_pos.to_owned()
@@ -1102,16 +1229,16 @@ impl<'a> AstVisitor<'a> {
         // clone here to prevent any accidental side effects
         let mut call_args: SahaFunctionArguments = args.clone();
 
-        if member_is_static == false {
+        if member_is_static == false && instref.is_some() {
             // insert `self` to the call
-            call_args.insert("self".to_string(), Value::obj(instref));
+            call_args.insert("self".to_string(), Value::obj(instref.unwrap()));
         }
 
         return method_ref.call(call_args, Some(actual_return_type), Vec::new(), access_pos.clone());
     }
 
     /// Visit a newup expression.
-    fn visit_instance_newup(&mut self, ident: &Identifier, args: &Box<Expression>, typeparams: &Vec<SahaType>) -> AstResult {
+    fn visit_instance_newup(&mut self, ident: &Identifier, args: &Box<Expression>, typeparams: &Vec<Box<SahaType>>) -> AstResult {
         let newup_args: SahaFunctionArguments = self.parse_callable_args(args)?;
         let inst_val: Value;
         let new_instref: InstRef;
@@ -1139,7 +1266,12 @@ impl<'a> AstVisitor<'a> {
             (Some(def), None) => self.create_new_instance(new_instref, def, newup_args, typeparams, Some(ident.file_position.clone()))?,
             (None, Some(fnref)) => self.create_new_core_instance(new_instref, fnref, newup_args, typeparams, Some(ident.file_position.clone()))?,
             _ => {
-                unimplemented!()
+                let err = RuntimeError::new(
+                    &format!("Cannot instantiate unknown class `{}`", ident.identifier),
+                    Some(ident.file_position.clone())
+                );
+
+                return Err(err);
             }
         };
 
@@ -1154,12 +1286,12 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Create a new core class instance.
-    fn create_new_core_instance(&mut self, instref: InstRef, factory_fn: CoreConstructorFn, args: SahaFunctionArguments, typeparams: &Vec<SahaType>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
+    fn create_new_core_instance(&mut self, instref: InstRef, factory_fn: CoreConstructorFn, args: SahaFunctionArguments, typeparams: &Vec<Box<SahaType>>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
         return factory_fn(instref, args, typeparams, create_pos);
     }
 
     /// Create a new instance from a userland class definition.
-    fn create_new_instance(&mut self, instref: InstRef, def: ClassDefinition, args: SahaFunctionArguments, typeparams: &Vec<SahaType>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
+    fn create_new_instance(&mut self, instref: InstRef, def: ClassDefinition, args: SahaFunctionArguments, typeparams: &Vec<Box<SahaType>>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
         return def.create_new_instance(instref, args, typeparams, &create_pos);
     }
 }

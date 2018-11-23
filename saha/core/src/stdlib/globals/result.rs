@@ -15,7 +15,7 @@ use saha_lib::{
     types::{
         Value, SahaType,
         objects::{ClassDefinition, AccessParams, Property, ObjProperties, SahaObject},
-        functions::{SahaCallable, SahaCallResult, SahaFunctionArguments}
+        functions::{SahaCallable, SahaCallResult, ValidatesArgs, FunctionParameter, SahaFunctionParamDefs, SahaFunctionArguments}
     }
 };
 
@@ -23,7 +23,7 @@ use saha_lib::{
 pub fn new_instance(
     instref: InstRef,
     args: SahaFunctionArguments,
-    type_params: &Vec<SahaType>,
+    type_params: &Vec<Box<SahaType>>,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 2 {
@@ -38,11 +38,11 @@ pub fn new_instance(
         return Err(err);
     }
 
-    //FIXME typeparam validation
+    // FIXME type param validation
 
     let result_inst = Box::new(SahaResult {
         success_type: type_params[0].clone(),
-        fail_type: type_params[0].clone(),
+        fail_type: type_params[1].clone(),
         result_value: Value::void(),
         is_success: false,
         instref: instref
@@ -55,8 +55,8 @@ pub fn new_instance(
 #[derive(Clone)]
 pub struct SahaResult {
     instref: InstRef,
-    pub success_type: SahaType,
-    pub fail_type: SahaType,
+    pub success_type: Box<SahaType>,
+    pub fail_type: Box<SahaType>,
     pub result_value: Value,
     pub is_success: bool
 }
@@ -90,11 +90,18 @@ impl SahaObject for SahaResult {
         unimplemented!()
     }
 
-    fn get_type_params(&self) -> Vec<(char, SahaType)> {
+    fn get_type_params(&self) -> Vec<(char, Box<SahaType>)> {
         return vec![
             ('T', self.success_type.clone()),
             ('U', self.fail_type.clone())
         ];
+    }
+
+    fn get_named_type(&self) -> Box<SahaType> {
+        return Box::new(SahaType::Name(
+            "Result".to_string(),
+            vec![self.success_type.clone(), self.fail_type.clone()]
+        ));
     }
 
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
@@ -107,6 +114,11 @@ impl SahaObject for SahaResult {
             }
         } else {
             match access.member_name as &str {
+                "succeed" => self.succeed(args, access),
+                "fail" => self.fail(args, access),
+                "is_success" => Ok(Value::bool(self.is_success)),
+                "is_failed" => Ok(Value::bool(!self.is_success)),
+                "unwrap" => Ok(self.result_value.clone()),
                 _ => {
                     Err(RuntimeError::new(
                         &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -127,5 +139,53 @@ impl SahaObject for SahaResult {
 
     fn box_clone(&self) -> Box<dyn SahaObject> {
         return Box::new(self.clone());
+    }
+}
+
+impl SahaResult {
+    /// This defines the parameters the succeed function requires.
+    fn succeed_params(&self) -> SahaFunctionParamDefs {
+        let mut params = HashMap::new();
+
+        params.insert("value".to_string(), FunctionParameter {
+            name: "value".to_string(),
+            param_type: self.success_type.clone(),
+            default: Value::void()
+        });
+
+        return params;
+    }
+
+    /// This makes the Result succeed with a given value.
+    pub fn succeed(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+        self.succeed_params().validate_args(&args, access.access_file_pos)?;
+
+        self.is_success = true;
+        self.result_value = args.get("value").unwrap().clone();
+
+        return Ok(Value::void());
+    }
+
+    /// This defines the parameters the fail function requires.
+    fn fail_params(&self) -> SahaFunctionParamDefs {
+        let mut params = HashMap::new();
+
+        params.insert("value".to_string(), FunctionParameter {
+            name: "value".to_string(),
+            param_type: self.success_type.clone(),
+            default: Value::void()
+        });
+
+        return params;
+    }
+
+    /// This makes the Result fail with a given value.
+    pub fn fail(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+        self.fail_params().validate_args(&args, access.access_file_pos)?;
+
+        self.is_success = false;
+        self.result_value = args.get("value").unwrap().clone();
+
+        return Ok(Value::void());
     }
 }

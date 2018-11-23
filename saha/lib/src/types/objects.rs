@@ -50,7 +50,10 @@ pub trait SahaObject: Send {
     fn get_method_ref(&mut self, method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError>;
 
     /// Get type parameter definitions (i.e. generics definitions).
-    fn get_type_params(&self) -> Vec<(char, SahaType)>;
+    fn get_type_params(&self) -> Vec<(char, Box<SahaType>)>;
+
+    /// Get the object `Name` type value.
+    fn get_named_type(&self) -> Box<SahaType>;
 
     /// Call an object member, e.g. a method. We denote whether this is a static call, and we pass
     /// in an optional instance reference of the calling context (which is used to determine if this
@@ -79,7 +82,7 @@ impl Clone for Box<dyn SahaObject> {
 #[derive(Clone, Debug)]
 pub struct Property {
     pub name: String,
-    pub prop_type: SahaType,
+    pub prop_type: Box<SahaType>,
     pub default: Value,
     pub is_static: bool,
     pub visibility: MemberVisibility,
@@ -113,24 +116,24 @@ impl ValidatesArgs for ObjProperties {
         }
 
         for (pname, p) in self {
-            if p.default.kind == SahaType::Void && args.contains_key(pname) == false {
+            if *p.default.kind == SahaType::Void && args.contains_key(pname) == false {
                 // no default and no arg for it given
                 let err = RuntimeError::new(&format!("The `{}` argument is required", pname), call_pos.to_owned());
 
                 return Err(err);
-            } else if p.default.kind != SahaType::Void && args.contains_key(pname) == false {
+            } else if *p.default.kind != SahaType::Void && args.contains_key(pname) == false {
                 // default exists and no args was provided, we're OK here
                 continue;
             }
 
-            let propk = &p.prop_type;
+            let propk = p.prop_type.clone();
             let arg = &args.get(pname).unwrap();
-            let argk = &arg.kind;
+            let argk = arg.kind.clone();
 
-            match argk {
+            match *argk {
                 SahaType::Obj => {
-                    let wanted_name = match propk {
-                        SahaType::Name(n) => n,
+                    let wanted_name = match *propk {
+                        SahaType::Name(ref n, ..) => n.clone(),
                         _ => {
                             let err = RuntimeError::new(
                                 &format!(
@@ -148,6 +151,8 @@ impl ValidatesArgs for ObjProperties {
 
                     // get the object type+implements list for comparing
                     let mut inst_impl: Vec<String>;
+                    let inst_fqname: String;
+                    let inst_type: Box<SahaType>;
 
                     {
                         let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
@@ -156,15 +161,19 @@ impl ValidatesArgs for ObjProperties {
 
                         inst_impl = inst.get_implements();
                         inst_impl.push(inst.get_fully_qualified_class_name());
+                        inst_fqname = inst.get_fully_qualified_class_name();
+                        inst_type = inst.get_named_type();
                     }
 
-                    if inst_impl.contains(&wanted_name) == false {
+
+                    // Compare class/behavior names, then types (as there could be different type params in use)
+                    if inst_impl.contains(&wanted_name) == false || *propk != *inst_type {
                         let err = RuntimeError::new(
                             &format!(
                                 "Invalid argument `{}`, expected `{}` but received `{}`",
                                 pname,
                                 propk.to_readable_string(),
-                                argk.to_readable_string()
+                                inst_fqname
                             ),
                             call_pos.to_owned()
                         );
@@ -173,7 +182,7 @@ impl ValidatesArgs for ObjProperties {
                     }
                 },
                 _ => {
-                    if propk != argk {
+                    if *propk != *argk {
                         let err = RuntimeError::new(
                             &format!(
                                 "Invalid argument `{}`, expected `{}` but received `{}`",
@@ -206,20 +215,20 @@ pub struct ClassDefinition {
     pub fqname: String,
     pub properties: ObjProperties,
     pub implements: Vec<String>,
-    pub type_params: Vec<(char, SahaType)>
+    pub type_params: Vec<(char, Box<SahaType>)>
 }
 
 impl ClassDefinition {
     /// Get parsed class properties, where type parameters have been normalized.
     fn get_parsed_properties(
         &self,
-        type_params: &HashMap<char, SahaType>,
+        type_params: &HashMap<char, Box<SahaType>>,
         create_pos: &Option<FilePosition>
     ) -> Result<ObjProperties, RuntimeError> {
         let mut new_props: ObjProperties = HashMap::new();
 
         for (pname, p) in &self.properties {
-            let new_p = match p.prop_type {
+            let new_p = match *p.prop_type {
                 SahaType::TypeParam(n) => {
                     let mut np = p.clone();
 
@@ -250,7 +259,7 @@ impl ClassDefinition {
         &self,
         inst_ref: InstRef,
         args: SahaFunctionArguments,
-        typeparams: &Vec<SahaType>,
+        typeparams: &Vec<Box<SahaType>>,
         create_pos: &Option<FilePosition>
     ) -> Result<Box<dyn SahaObject>, RuntimeError> {
         if self.type_params.len() != typeparams.len() {
@@ -263,7 +272,7 @@ impl ClassDefinition {
         }
 
         let mut tyidx = 0;
-        let mut received_typarams: HashMap<char, SahaType> = HashMap::new();
+        let mut received_typarams: HashMap<char, Box<SahaType>> = HashMap::new();
 
         for (c, _) in &self.type_params {
             received_typarams.insert(*c, typeparams[tyidx].clone());
@@ -271,7 +280,7 @@ impl ClassDefinition {
             tyidx += 1;
         }
 
-        let mut parsed_properties = self.get_parsed_properties(&received_typarams, create_pos)?;
+        let parsed_properties = self.get_parsed_properties(&received_typarams, create_pos)?;
 
         parsed_properties.validate_args(&args, create_pos)?;
 
@@ -332,7 +341,7 @@ pub struct UserInstance {
     inst_ref: InstRef,
     implements: Vec<String>,
     properties: HashMap<String, Property>,
-    type_params: Vec<(char, SahaType)>
+    type_params: Vec<(char, Box<SahaType>)>
 }
 
 impl SahaObject for UserInstance {
@@ -377,8 +386,15 @@ impl SahaObject for UserInstance {
         return Ok(method_callable);
     }
 
-    fn get_type_params(&self) -> Vec<(char, SahaType)> {
+    fn get_type_params(&self) -> Vec<(char, Box<SahaType>)> {
         return self.type_params.clone();
+    }
+
+    fn get_named_type(&self) -> Box<SahaType> {
+        return Box::new(SahaType::Name(
+            self.fq_class_name.clone(),
+            self.type_params.clone().into_iter().map(|(_, t)| t).collect())
+        );
     }
 
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
@@ -412,14 +428,19 @@ impl SahaObject for UserInstance {
         let typeparammap: HashMap<_, _> = tparams.into_iter().collect();
         let member_ret_type = member_callable.get_return_type();
 
-        let actual_return_type: SahaType = match member_ret_type {
+        let actual_return_type: Box<SahaType> = match *member_ret_type {
             SahaType::TypeParam(ty) => {
-                let maybe_ty = typeparammap.get(&ty).unwrap_or(&SahaType::Void);
+                let maybe_ty: Box<SahaType> = typeparammap.get(&ty).unwrap_or(&Box::new(SahaType::Void)).clone();
 
-                match maybe_ty {
-                    SahaType::Void => {
+                match maybe_ty == Box::new(SahaType::Void) {
+                    true => {
                         let err = RuntimeError::new(
-                            &format!("Method `{}` on class `{}` expects a type parameter `{}`, but none was defined", member, self.get_fully_qualified_class_name(), ty),
+                            &format!(
+                                "Method `{}` on class `{}` expects a type parameter `{}`, but none was defined",
+                                member,
+                                self.get_fully_qualified_class_name(),
+                                ty
+                            ),
                             access_pos.to_owned()
                         );
 
@@ -587,7 +608,7 @@ impl SahaObject for UserInstance {
             return Err(err);
         }
 
-        if member_prop.prop_type != new_value.kind {
+        if *member_prop.prop_type != *new_value.kind {
             let err = RuntimeError::new(
                 &format!(
                     "Type mismatch when attempting to mutate property `{}` on class `{}`, expected `{:?}` but received `{:?}`",

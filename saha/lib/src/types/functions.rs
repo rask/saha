@@ -28,7 +28,7 @@ pub type SahaFunctionArguments = HashMap<String, Value>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionParameter {
     pub name: String,
-    pub param_type: SahaType,
+    pub param_type: Box<SahaType>,
     pub default: Value
 }
 
@@ -44,13 +44,13 @@ pub trait ValidatesArgs {
 /// Anything which can be called in Saha. Functions and methods mainly.
 pub trait SahaCallable: Send + Sync {
     /// Call this callable.
-    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult;
+    fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult;
 
     /// Get the parameters that this callable accepts.
     fn get_parameters(&self) -> SahaFunctionParamDefs;
 
     /// Get the return type this callable should return.
-    fn get_return_type(&self) -> SahaType;
+    fn get_return_type(&self) -> Box<SahaType>;
 
     /// Get the name of the function. Not necessarily the name with which it appears in source code.
     fn get_name(&self) -> String;
@@ -102,7 +102,7 @@ impl Clone for Box<dyn SahaCallable> {
 pub struct CoreFunction {
     pub name: String,
     pub params: SahaFunctionParamDefs,
-    pub return_type: SahaType,
+    pub return_type: Box<SahaType>,
     pub fn_ref: fn(args: SahaFunctionArguments) -> SahaCallResult,
     pub is_public: bool,
     pub is_static: bool
@@ -114,14 +114,14 @@ pub struct UserFunction {
     pub source_name: String,
     pub name: String,
     pub params: SahaFunctionParamDefs,
-    pub return_type: SahaType,
+    pub return_type: Box<SahaType>,
     pub ast: Ast,
     pub visibility: MemberVisibility,
     pub is_static: bool
 }
 
 impl SahaCallable for CoreFunction {
-    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
+    fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(&args, &call_source_position)?;
 
         let ret_type = match &return_type {
@@ -131,10 +131,10 @@ impl SahaCallable for CoreFunction {
 
         let res = (self.fn_ref)(args.clone())?;
 
-        match res.kind {
+        match *res.kind {
             SahaType::Obj => {
-                let wanted_name = match &ret_type {
-                    SahaType::Name(n) => n,
+                let wanted_name = match *ret_type {
+                    SahaType::Name(ref n, ..) => n.clone(),
                     _ => {
                         let err = RuntimeError::new(
                             &format!(
@@ -162,7 +162,7 @@ impl SahaCallable for CoreFunction {
                     inst_impl.push(inst.get_fully_qualified_class_name());
                 }
 
-                if inst_impl.contains(&wanted_name) == false {
+                if inst_impl.contains(&wanted_name) == false || res.kind != ret_type {
                     let err = RuntimeError::new(
                         &format!(
                             "Return type mismatch for `{}`, expected `{:?}` but received `{:?}`",
@@ -200,7 +200,7 @@ impl SahaCallable for CoreFunction {
         return self.params.clone();
     }
 
-    fn get_return_type(&self) -> SahaType {
+    fn get_return_type(&self) -> Box<SahaType> {
         return self.return_type.clone()
     }
 
@@ -230,7 +230,7 @@ impl SahaCallable for CoreFunction {
 }
 
 impl SahaCallable for UserFunction {
-    fn call(&self, args: SahaFunctionArguments, return_type: Option<SahaType>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
+    fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
         self.params.validate_args(&args, &call_source_position)?;
 
         let ret_type = match &return_type {
@@ -243,10 +243,10 @@ impl SahaCallable for UserFunction {
 
         let res = ast_visitor.start()?;
 
-        match res.kind {
+        match *res.kind {
             SahaType::Obj => {
-                let wanted_name = match &ret_type {
-                    SahaType::Name(n) => n,
+                let wanted_name = match *ret_type {
+                    SahaType::Name(ref n, ..) => n.clone(),
                     _ => {
                         let err = RuntimeError::new(
                             &format!(
@@ -264,6 +264,8 @@ impl SahaCallable for UserFunction {
 
                 // get the object type+implements list for comparing
                 let mut inst_impl: Vec<String>;
+                let inst_fqname: String;
+                let inst_type: Box<SahaType>;
 
                 {
                     let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
@@ -272,15 +274,17 @@ impl SahaCallable for UserFunction {
 
                     inst_impl = inst.get_implements();
                     inst_impl.push(inst.get_fully_qualified_class_name());
+                    inst_fqname = inst.get_fully_qualified_class_name();
+                    inst_type = inst.get_named_type();
                 }
 
-                if inst_impl.contains(&wanted_name) == false {
+                if inst_impl.contains(&wanted_name) == false || ret_type != inst_type {
                     let err = RuntimeError::new(
                         &format!(
                             "Return type mismatch for `{}`, expected `{:?}` but received `{:?}`",
                             self.name,
                             ret_type,
-                            res.kind
+                            inst_fqname
                         ),
                         call_source_position
                     );
@@ -312,7 +316,7 @@ impl SahaCallable for UserFunction {
         return self.params.clone();
     }
 
-    fn get_return_type(&self) -> SahaType {
+    fn get_return_type(&self) -> Box<SahaType> {
         return self.return_type.clone();
     }
 
@@ -359,9 +363,9 @@ impl ValidatesArgs for SahaFunctionParamDefs {
         let param_name = self.keys().nth(0).unwrap();
         let param = self.values().nth(0).unwrap();
         let param_default = &param.default;
-        let param_type = &param.param_type;
+        let param_type = param.param_type.clone();
 
-        if let SahaType::Void = param_default.kind {
+        if let SahaType::Void = *param_default.kind {
             if validation_args.is_empty() {
                 // no arg and no default, which is a no-no
                 let err = RuntimeError::new(
@@ -379,7 +383,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
         let arg = validation_args.values().nth(0).unwrap();
 
         // arg type mismatch
-        if arg.kind != *param_type {
+        if *param_type != *arg {
             let err = RuntimeError::new(
                 &format!(
                     "Invalid argument, `{}` is expected to be a `{}`, found `{}` instead",
@@ -399,8 +403,6 @@ impl ValidatesArgs for SahaFunctionParamDefs {
     }
 
     fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
-        let mut allow_call_without_arg_name = false;
-
         if self.keys().len() == 1 {
             // if a function accepts only a single argument, we allow calling without setting a
             // parameter name (will use `""` internally)
@@ -408,12 +410,12 @@ impl ValidatesArgs for SahaFunctionParamDefs {
         }
 
         for (name, ref param) in self {
-            let param_type = param.param_type.to_owned();
+            let param_type = param.param_type.clone();
             let param_default = param.default.to_owned();
 
             // arg missing, see if default is provided
             if args.contains_key(name) == false {
-                match param_default.kind {
+                match *param_default.kind {
                     SahaType::Void => {
                         let err = RuntimeError::new(
                             &format!("Invalid arguments, argument `{}` missing", name),
@@ -429,7 +431,7 @@ impl ValidatesArgs for SahaFunctionParamDefs {
             let arg = args.get(name).unwrap();
 
             // arg type mismatch
-            if arg.kind != param_type {
+            if *param_type != *arg {
                 let err = RuntimeError::new(
                     &format!(
                         "Invalid argument, `{}` is expected to be a `{}`, found `{}` instead",

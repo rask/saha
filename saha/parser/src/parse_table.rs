@@ -24,7 +24,7 @@ pub struct FunctionDefinition {
     pub name: String,
     pub source_name: String,
     pub source_position: FilePosition,
-    pub return_type: SahaType,
+    pub return_type: Box<SahaType>,
     pub body_tokens: Vec<Token>,
     pub visibility: MemberVisibility,
     pub is_static: bool,
@@ -38,7 +38,7 @@ pub struct PropertyDefinition {
     pub source_position: FilePosition,
     pub visibility: MemberVisibility,
     pub is_static: bool,
-    pub property_type: SahaType,
+    pub property_type: Box<SahaType>,
     pub default: Value
 }
 
@@ -52,7 +52,7 @@ pub struct ClassDefinition {
     pub properties: HashMap<String, PropertyDefinition>,
     pub methods: HashMap<String, FunctionDefinition>,
     pub implements: Vec<String>,
-    pub type_params: Vec<(char, SahaType)>
+    pub type_params: Vec<(char, Box<SahaType>)>
 }
 
 /// Behavior definitions, used to build actual behaviors.

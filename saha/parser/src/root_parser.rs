@@ -157,6 +157,56 @@ impl<'a> RootParser<'a> {
         }
     }
 
+    /// Parse a type declaration.
+    fn parse_type_declaration(&mut self, parse_param_types: bool) -> PR<Box<SahaType>> {
+        self.consume_next(vec!["name", "typestring", "typeboolean", "typeinteger", "typefloat"])?;
+
+        let typ = match self.ctok.unwrap() {
+            Token::TypeBoolean(..) => SahaType::Bool,
+            Token::TypeString(..) => SahaType::Str,
+            Token::TypeInteger(..) => SahaType::Int,
+            Token::TypeFloat(..) => SahaType::Float,
+            Token::Name(_, n, _) => {
+                if parse_param_types && self.validate_paramtype_name(&n) {
+                    SahaType::TypeParam(n.to_owned().chars().nth(0).unwrap())
+                } else {
+                    let mut type_params = Vec::new();
+
+                    match self.ntok.unwrap() {
+                        Token::OpLt(..) => {
+                            // parse type parameters
+                            self.consume_next(vec!["<"])?;
+
+                            loop {
+                                // parse with recursion, in case subtypes are generic as well
+                                type_params.push(self.parse_type_declaration(parse_param_types)?);
+
+                                match self.ntok.unwrap() {
+                                    Token::Comma(..) => {
+                                        self.consume_next(vec![","])?;
+
+                                        continue;
+                                    },
+                                    _ => break
+                                };
+                            }
+
+                            self.consume_next(vec![">"])?;
+
+                            SahaType::Name(n.to_owned(), type_params)
+                        },
+                        _ => {
+                            SahaType::Name(n.to_owned(), type_params)
+                        }
+                    }
+                }
+            },
+            _ => unreachable!()
+        };
+
+        return Ok(Box::new(typ));
+    }
+
     /// Parse root level function declaration.
     fn parse_function_declaration(&mut self) -> PR<()> {
         self.consume_next(vec!["name"])?;
@@ -182,11 +232,11 @@ impl<'a> RootParser<'a> {
 
         self.consume_next(vec![")"])?;
 
-        let return_type: SahaType = self.parse_function_return_type(false)?;
+        let return_type: Box<SahaType> = self.parse_function_return_type(false, false)?;
 
         // If there was a return type we need to consume the body open curly here, otherwise it has
         // been consumed already
-        match return_type {
+        match *return_type {
             SahaType::Void => (),
             _ => self.consume_next(vec!["{"])?
         };
@@ -234,22 +284,7 @@ impl<'a> RootParser<'a> {
 
             self.consume_next(vec!["'"])?;
 
-            self.consume_next(vec!["typestring", "typeinteger", "typefloat", "typeboolean", "name"])?;
-
-            let param_type = match self.ctok.unwrap() {
-                Token::TypeBoolean(..) => SahaType::Bool,
-                Token::TypeString(..) => SahaType::Str,
-                Token::TypeInteger(..) => SahaType::Int,
-                Token::TypeFloat(..) => SahaType::Float,
-                Token::Name(_, n, _) => {
-                    if parse_param_types && self.validate_paramtype_name(&n) {
-                        SahaType::TypeParam(n.to_owned().chars().nth(0).unwrap())
-                    } else {
-                        SahaType::Name(n.to_owned())
-                    }
-                },
-                _ => unreachable!()
-            };
+            let param_type = self.parse_type_declaration(parse_param_types)?;
 
             let paramdef: FunctionParameter;
 
@@ -311,24 +346,28 @@ impl<'a> RootParser<'a> {
     }
 
     /// Parse a function return type.
-    fn parse_function_return_type(&mut self, parse_param_types: bool) -> PR<SahaType> {
-        self.consume_next(vec!["name", "typestring", "typeboolean", "typeinteger", "typefloat", "{"])?;
+    fn parse_function_return_type(&mut self, parse_param_types: bool, for_behavior: bool) -> PR<Box<SahaType>> {
+        let typ = if for_behavior {
+            match self.ntok.unwrap() {
+                Token::EndStatement(..) => {
+                    self.consume_next(vec![";"])?;
 
-        match self.ctok.unwrap() {
-            Token::Name(_, alias, _) => {
-                if parse_param_types && self.validate_paramtype_name(&alias) {
-                    Ok(SahaType::TypeParam(alias.to_owned().chars().nth(0).unwrap()))
-                } else {
-                    Ok(SahaType::Name(alias.to_owned()))
-                }
-            },
-            Token::TypeBoolean(..) => Ok(SahaType::Bool),
-            Token::TypeString(..) => Ok(SahaType::Str),
-            Token::TypeInteger(..) => Ok(SahaType::Int),
-            Token::TypeFloat(..) => Ok(SahaType::Float),
-            Token::CurlyOpen(..) => Ok(SahaType::Void),
-            _ => unreachable!()
-        }
+                    Box::new(SahaType::Void)
+                },
+                _ => self.parse_type_declaration(parse_param_types)?
+            }
+        } else {
+            match self.ntok.unwrap() {
+                Token::CurlyOpen(..) => {
+                    self.consume_next(vec!["{"])?;
+
+                    Box::new(SahaType::Void)
+                },
+                _ => self.parse_type_declaration(parse_param_types)?
+            }
+        };
+
+        return Ok(typ);
     }
 
     /// Parse a curly brace delimited body, a function body for instance. Just
@@ -377,7 +416,7 @@ impl<'a> RootParser<'a> {
 
         let const_val = self.parse_literal_value()?;
 
-        if const_val.kind != const_type {
+        if *const_val.kind != const_type {
             return Err(ParseError::new(
                 &format!(
                     "Constant type mismatch for `{}`, expected `{}`, received `{}`",
@@ -486,7 +525,7 @@ impl<'a> RootParser<'a> {
             ));
         }
 
-        let paramtype_defs: Vec<(char, SahaType)>;
+        let paramtype_defs: Vec<(char, Box<SahaType>)>;
 
         if let Token::OpLt(..) = self.ntok.unwrap() {
             paramtype_defs = self.parse_paramtype_defs()?;
@@ -530,8 +569,8 @@ impl<'a> RootParser<'a> {
     }
 
     /// Parse parameter type definitions for a class.
-    fn parse_paramtype_defs(&mut self) -> PR<Vec<(char, SahaType)>> {
-        let mut ptypes: Vec<(char, SahaType)> = Vec::new();
+    fn parse_paramtype_defs(&mut self) -> PR<Vec<(char, Box<SahaType>)>> {
+        let mut ptypes: Vec<(char, Box<SahaType>)> = Vec::new();
 
         self.consume_next(vec!["<"])?;
 
@@ -563,7 +602,7 @@ impl<'a> RootParser<'a> {
             }
 
             existing.push(type_char);
-            ptypes.push((type_char, SahaType::Void));
+            ptypes.push((type_char, Box::new(SahaType::Void)));
 
             match self.ntok.unwrap() {
                 Token::OpGt(..) => break,
@@ -775,22 +814,7 @@ impl<'a> RootParser<'a> {
 
         self.consume_next(vec!["'"])?;
 
-        self.consume_next(vec!["name", "str", "int", "float", "bool"])?;
-
-        let prop_type = match self.ctok.unwrap() {
-            Token::TypeBoolean(..) => SahaType::Bool,
-            Token::TypeString(..) => SahaType::Str,
-            Token::TypeInteger(..) => SahaType::Int,
-            Token::TypeFloat(..) => SahaType::Float,
-            Token::Name(_, alias, _) => {
-                if self.validate_paramtype_name(&alias) == false {
-                    SahaType::Name(alias.to_owned())
-                } else {
-                    SahaType::TypeParam(alias.to_owned().chars().nth(0).unwrap())
-                }
-            },
-            _ => unreachable!()
-        };
+        let prop_type = self.parse_type_declaration(true)?;
 
         self.consume_next(vec![";", "="])?;
 
@@ -843,14 +867,11 @@ impl<'a> RootParser<'a> {
 
         self.consume_next(vec![")"])?;
 
-        let return_type: SahaType = self.parse_function_return_type(true)?;
+        let return_type: Box<SahaType> = self.parse_function_return_type(true, false)?;
 
-        // If there was a return type we need to consume the body open curly here, otherwise it has
-        // been consumed already
-        match return_type {
-            SahaType::Void => (),
-            _ => self.consume_next(vec!["{"])?
-        };
+        if *return_type != SahaType::Void {
+            self.consume_next(vec!["{"])?;
+        }
 
         let fn_body_tokens = self.parse_curly_block()?;
 
@@ -952,19 +973,9 @@ impl<'a> RootParser<'a> {
 
                     self.consume_next(vec![")"])?;
 
-                    self.consume_next(vec![";", "str", "int", "float", "bool", "name"])?;
+                    let return_type = self.parse_function_return_type(false, true)?;
 
-                    let return_type = match self.ctok.unwrap() {
-                        Token::EndStatement(..) => SahaType::Void,
-                        Token::TypeBoolean(..) => SahaType::Bool,
-                        Token::TypeString(..) => SahaType::Str,
-                        Token::TypeInteger(..) => SahaType::Int,
-                        Token::TypeFloat(..) => SahaType::Float,
-                        Token::Name(_, n, _) => SahaType::Name(n.to_owned()),
-                        _ => unreachable!()
-                    };
-
-                    if return_type != SahaType::Void {
+                    if *return_type != SahaType::Void {
                         self.consume_next(vec![";"])?;
                     }
 
@@ -1083,7 +1094,7 @@ mod tests {
 
         let fndefinition = parse_table.functions.get("pkg.main").unwrap();
 
-        assert_eq!(SahaType::Int, fndefinition.return_type);
+        assert_eq!(Box::new(SahaType::Int), fndefinition.return_type);
         assert_eq!(1, fndefinition.body_tokens.len()); // should contain only an EOB
         assert_eq!(0, fndefinition.parameters.len());
         assert_eq!("main".to_string(), fndefinition.source_name);
@@ -1134,11 +1145,11 @@ mod tests {
         let foo_param = params.get("foo").unwrap();
         let bar_param = params.get("bar").unwrap();
 
-        assert_eq!(SahaType::Str, foo_param.param_type);
-        assert_eq!(SahaType::Void, foo_param.default.kind);
+        assert_eq!(Box::new(SahaType::Str), foo_param.param_type);
+        assert_eq!(Box::new(SahaType::Void), foo_param.default.kind);
 
-        assert_eq!(SahaType::Int, bar_param.param_type);
-        assert_eq!(SahaType::Int, bar_param.default.kind);
+        assert_eq!(Box::new(SahaType::Int), bar_param.param_type);
+        assert_eq!(Box::new(SahaType::Int), bar_param.default.kind);
         assert_eq!(123, bar_param.default.int.unwrap());
     }
 
@@ -1292,11 +1303,11 @@ mod tests {
 
         assert_eq!(2, cmeth.len());
         assert_eq!("helloThere".to_string(), cmeth.get("helloThere").unwrap().name);
-        assert_eq!(SahaType::Void, cmeth.get("helloThere").unwrap().return_type);
+        assert_eq!(Box::new(SahaType::Void), cmeth.get("helloThere").unwrap().return_type);
         assert_eq!(false, cmeth.get("helloThere").unwrap().is_static);
         assert_eq!(MemberVisibility::Private, cmeth.get("helloThere").unwrap().visibility);
 
-        assert_eq!(SahaType::Int, cmeth.get("helloAgain").unwrap().return_type);
+        assert_eq!(Box::new(SahaType::Int), cmeth.get("helloAgain").unwrap().return_type);
         assert_eq!(MemberVisibility::Public, cmeth.get("helloAgain").unwrap().visibility);
         assert_eq!(vec![
             Token::KwReturn(testfilepos()),
@@ -1306,7 +1317,7 @@ mod tests {
         ], cmeth.get("helloAgain").unwrap().body_tokens);
 
         assert_eq!(1, cprop.len());
-        assert_eq!(SahaType::Str, cprop.get("propname").unwrap().property_type);
+        assert_eq!(Box::new(SahaType::Str), cprop.get("propname").unwrap().property_type);
         assert_eq!(Value::str("hello world".to_string()), cprop.get("propname").unwrap().default);
     }
 
@@ -1357,7 +1368,7 @@ mod tests {
         let behavior_definition = parse_table.behaviors.get("pkg.MyBehavior").unwrap();
 
         assert_eq!("pkg.MyBehavior".to_string(), behavior_definition.name);
-        assert_eq!(SahaType::Void, behavior_definition.methods.get("otherMethod").unwrap().parameters.get("param1").unwrap().default.kind);
+        assert_eq!(Box::new(SahaType::Void), behavior_definition.methods.get("otherMethod").unwrap().parameters.get("param1").unwrap().default.kind);
     }
 
     #[test]

@@ -22,7 +22,7 @@ use saha_lib::{
 pub fn create_core_function(
     name: &str,
     params: Vec<(&str, FunctionParameter)>,
-    return_type: SahaType,
+    return_type: Box<SahaType>,
     rust_fn: fn(args: SahaFunctionArguments) -> SahaCallResult
 ) -> (String, CoreFunction) {
     let mut fn_params: SahaFunctionParamDefs = HashMap::new();
@@ -41,22 +41,4 @@ pub fn create_core_function(
     };
 
     return (name.to_owned(), corefn);
-}
-
-/// Create a core method to use on an instance as a method.
-pub fn create_core_method(
-    name: &str,
-    params: Vec<(&str, FunctionParameter)>,
-    return_type: SahaType,
-    rust_fn: fn(args: SahaFunctionArguments, param_types: Vec<(char, SahaType)>) -> SahaCallResult,
-    is_public: bool,
-    is_static: bool,
-) -> (String, CoreFunction) {
-    let mut fn_params: SahaFunctionParamDefs = HashMap::new();
-
-    for (pname, p) in params {
-        fn_params.insert(pname.to_owned(), p);
-    }
-
-    unimplemented!()
 }

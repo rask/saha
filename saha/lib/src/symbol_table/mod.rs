@@ -26,7 +26,7 @@ use crate::{
 pub type InstRef = [u8; 16];
 
 /// Helper type for core class constructors.
-pub type CoreConstructorFn = fn(instref: InstRef, args: SahaFunctionArguments, param_types: &Vec<SahaType>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>;
+pub type CoreConstructorFn = fn(instref: InstRef, args: SahaFunctionArguments, param_types: &Vec<Box<SahaType>>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>;
 
 /// Symbol table, stores global parsed declarations and definitions, in addition
 /// to references to things that should be available globally.
@@ -126,7 +126,7 @@ impl SymbolTable {
         &mut self,
         class_name: String,
         args: SahaFunctionArguments,
-        type_params: &Vec<SahaType>,
+        type_params: &Vec<Box<SahaType>>,
         create_pos: &Option<FilePosition>
     ) -> Result<Value, RuntimeError> {
         let def: Option<&ClassDefinition> = self.classes.get(&class_name);
@@ -160,7 +160,7 @@ impl SymbolTable {
         &mut self,
         class_name: String,
         args: SahaFunctionArguments,
-        type_params: &Vec<SahaType>,
+        type_params: &Vec<Box<SahaType>>,
         create_pos: &Option<FilePosition>
     ) -> Result<InstRef, RuntimeError> {
         let instref = Self::get_new_uuid_bytes();

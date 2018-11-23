@@ -24,11 +24,11 @@ pub fn get_saha_functions() -> Vec<(String, CoreFunction)> {
         vec![
             ("text", FunctionParameter {
                 name: "text".to_string(),
-                param_type: SahaType::Str,
+                param_type: Box::new(SahaType::Str),
                 default: Value::void()
             })
         ],
-        SahaType::Void,
+        Box::new(SahaType::Void),
         print
     ));
 
@@ -37,11 +37,11 @@ pub fn get_saha_functions() -> Vec<(String, CoreFunction)> {
         vec![
             ("text", FunctionParameter {
                 name: "text".to_string(),
-                param_type: SahaType::Str,
+                param_type: Box::new(SahaType::Str),
                 default: Value::void()
             })
         ],
-        SahaType::Void,
+        Box::new(SahaType::Void),
         print_line
     ));
 
@@ -50,11 +50,11 @@ pub fn get_saha_functions() -> Vec<(String, CoreFunction)> {
         vec![
             ("text", FunctionParameter {
                 name: "text".to_string(),
-                param_type: SahaType::Str,
+                param_type: Box::new(SahaType::Str),
                 default: Value::void()
             })
         ],
-        SahaType::Void,
+        Box::new(SahaType::Void),
         print_err
     ));
 
@@ -63,11 +63,11 @@ pub fn get_saha_functions() -> Vec<(String, CoreFunction)> {
         vec![
             ("text", FunctionParameter {
                 name: "text".to_string(),
-                param_type: SahaType::Str,
+                param_type: Box::new(SahaType::Str),
                 default: Value::void()
             })
         ],
-        SahaType::Void,
+        Box::new(SahaType::Void),
         print_err_line
     ));
 

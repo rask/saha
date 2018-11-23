@@ -22,7 +22,7 @@ use saha_lib::{
 pub fn new_instance(
     instref: InstRef,
     args: SahaFunctionArguments,
-    type_params: &Vec<SahaType>,
+    type_params: &Vec<Box<SahaType>>,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 1 {
@@ -50,7 +50,7 @@ pub fn new_instance(
 #[derive(Clone, Debug)]
 struct SahaList {
     instref: InstRef,
-    param_type: SahaType,
+    param_type: Box<SahaType>,
     pub data: Vec<Value>
 }
 
@@ -83,8 +83,15 @@ impl SahaObject for SahaList {
         unimplemented!()
     }
 
-    fn get_type_params(&self) -> Vec<(char, SahaType)> {
+    fn get_type_params(&self) -> Vec<(char, Box<SahaType>)> {
         return vec![('T', self.param_type.clone())];
+    }
+
+    fn get_named_type(&self) -> Box<SahaType> {
+        return Box::new(SahaType::Name(
+            "List".to_string(),
+            vec![self.param_type.clone()]
+        ));
     }
 
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
@@ -126,7 +133,7 @@ impl SahaObject for SahaList {
 }
 
 /// Get function parameter definition for the List::push method.
-fn list_push_params(ty: &SahaType) -> SahaFunctionParamDefs {
+fn list_push_params(ty: &Box<SahaType>) -> SahaFunctionParamDefs {
     let mut params: SahaFunctionParamDefs = HashMap::new();
 
     params.insert("value".to_string(), FunctionParameter {
@@ -139,7 +146,7 @@ fn list_push_params(ty: &SahaType) -> SahaFunctionParamDefs {
 }
 
 /// The List::push "method".
-fn list_push(ty: SahaType, data: &mut Vec<Value>, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+fn list_push(ty: Box<SahaType>, data: &mut Vec<Value>, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
     list_push_params(&ty).validate_args(&args, access.access_file_pos)?;
 
     let pushed_val = args.get("value").unwrap();

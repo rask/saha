@@ -47,7 +47,7 @@ pub enum StatementKind {
     /// ```saha
     /// var my_var'str = "hello";
     /// ```
-    VarDeclaration(Identifier, SahaType, Option<Box<Expression>>),
+    VarDeclaration(Identifier, Box<SahaType>, Option<Box<Expression>>),
 
     /// A one-off expression statement. Example:
     ///
@@ -108,6 +108,13 @@ pub enum StatementKind {
 pub struct Identifier {
     pub file_position: FilePosition,
     pub identifier: String,
+    pub type_params: Vec<Box<SahaType>>
+}
+
+impl Identifier {
+    fn has_type_params(&self) -> bool {
+        return self.type_params.is_empty() == false;
+    }
 }
 
 /// Expressions.
@@ -202,7 +209,7 @@ pub enum ExpressionKind {
     /// Newup a class. First is the class name, second is the constructor args,
     /// which are alike function call args. Lastly there are TypeParams for
     /// generics use.
-    NewInstance(Identifier, Box<Expression>, Vec<SahaType>),
+    NewInstance(Identifier, Box<Expression>, Vec<Box<SahaType>>),
 }
 
 /// Binary operation.
