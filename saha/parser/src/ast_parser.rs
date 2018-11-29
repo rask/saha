@@ -770,7 +770,8 @@ impl<'a> AstParser<'a> {
 
         let call_pos = self.ctok.unwrap().get_file_position();
 
-        let call_args: Box<Expression> = self.parse_callable_args()?;
+        // FIXME allow single parameter functions to leave out the parameter name
+        let call_args: Box<Expression> = self.parse_callable_args(true)?;
 
         self.consume_next(vec![")"])?;
 
@@ -784,7 +785,7 @@ impl<'a> AstParser<'a> {
 
     /// Parse function call arguments that are wrapped in parentheses. Also used
     /// for new instance args.
-    fn parse_callable_args(&mut self) -> PR<Box<Expression>> {
+    fn parse_callable_args(&mut self, allow_unnamed_single_param: bool) -> PR<Box<Expression>> {
         let mut args: Vec<Box<Expression>> = Vec::new();
         let args_pos = self.ctok.unwrap().get_file_position();
 
@@ -799,7 +800,9 @@ impl<'a> AstParser<'a> {
                     continue
                 },
                 _ => {
-                    args.push(self.parse_callable_arg()?);
+                    let (is_named_arg, arg_expr) = self.parse_callable_arg()?;
+
+                    args.push(arg_expr);
 
                     continue
                 }
@@ -815,10 +818,7 @@ impl<'a> AstParser<'a> {
     }
 
     /// Parse a single function call argument.
-    ///
-    /// FIXME: allow parsing a single arg without a name, in case we're calling
-    /// a callable that receives a single parameter
-    fn parse_callable_arg(&mut self) -> PR<Box<Expression>> {
+    fn parse_callable_arg(&mut self) -> PR<(bool, Box<Expression>)> {
         self.consume_next(vec!["name"])?;
 
         let argname: String = String::new();
@@ -833,7 +833,7 @@ impl<'a> AstParser<'a> {
 
         let arg_value_expr = self.parse_expression(0)?;
 
-        return Ok(Box::new(Expression {
+        return Ok((true, Box::new(Expression {
             file_position: argpos.clone(),
             kind: ExpressionKind::CallableArg(Identifier {
                 file_position: argpos.clone(),
@@ -841,7 +841,7 @@ impl<'a> AstParser<'a> {
                 type_params: Vec::new()
             },
             arg_value_expr)
-        }));
+        })));
     }
 
     /// Parse a newup.
@@ -865,7 +865,7 @@ impl<'a> AstParser<'a> {
 
         self.consume_next(vec!["("])?;
 
-        let newup_args = self.parse_callable_args()?;
+        let newup_args = self.parse_callable_args(false)?;
 
         self.consume_next(vec![")"])?;
 
