@@ -418,6 +418,8 @@ impl<'a> AstVisitor<'a> {
 
     /// Visit an expression.
     fn visit_expression(&mut self, expression: &Box<Expression>) -> AstResult {
+        let expr_position = expression.file_position.clone();
+
         match &expression.kind {
             ExpressionKind::LiteralValue(val) => Ok(val.clone()),
             ExpressionKind::BinaryOperation(lhs, op, rhs) => self.visit_binop_expression(lhs, op, rhs),
@@ -427,6 +429,7 @@ impl<'a> AstVisitor<'a> {
             ExpressionKind::IdentPath(..) => self.resolve_ident_path_to_value(&expression),
             ExpressionKind::NewInstance(ident, args, typeparams) => self.visit_instance_newup(ident, args, typeparams),
             ExpressionKind::ObjectAccess(lhs, accesskind, rhs) => self.visit_generic_object_access(lhs, accesskind, rhs),
+            ExpressionKind::ListDeclaration(item_exprs) => self.visit_list_shorthand_expression(item_exprs, expr_position),
             _ => unimplemented!("{:?}", expression.kind)
         }
     }
@@ -864,6 +867,82 @@ impl<'a> AstVisitor<'a> {
         return Ok(new_val);
     }
 
+    /// Visit a list declaration shorthand expression (`[]` delimited items).
+    fn visit_list_shorthand_expression(&mut self, items_exprs: &Vec<Box<Expression>>, pos: FilePosition) -> AstResult {
+        // the first list item determines the wanted list parameter type
+        let list_type: Box<SahaType>;
+        let mut items: Vec<Value> = Vec::new();
+
+        if items_exprs.is_empty() {
+            let err = RuntimeError::new(
+                "List shorthand expressions cannot be used for empty list declarations",
+                Some(pos)
+            );
+
+            return Err(err);
+        }
+
+        for item in items_exprs {
+            items.push(self.visit_expression(item)?);
+        }
+
+        list_type = items.first().unwrap().kind.clone();
+
+        for i in &items {
+            if i.kind != list_type {
+                let err = RuntimeError::new(
+                    &format!(
+                        "List expects values of type {}, but received {} instead",
+                        list_type.to_readable_string(),
+                        i.kind.to_readable_string()
+                    ),
+                    Some(pos)
+                );
+
+                return Err(err);
+            }
+        }
+
+        let mut item_args: SahaFunctionArguments = HashMap::new();
+        let mut idx = 0;
+
+        items.into_iter().for_each(|i| {
+            item_args.insert("item_".to_string() + idx.to_string().as_str(), i.clone());
+
+            idx += 1;
+        });
+
+        let list_instref: InstRef;
+        let list_typeparams = vec![list_type.clone()];
+        let create_args = HashMap::new();
+        let new_inst_method_ref: CoreConstructorFn;
+
+        {
+            let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+            list_instref = st.create_instref();
+            new_inst_method_ref = st.core_classes.get("List").unwrap().clone();
+        };
+
+        let list_instance = self.create_new_core_instance(
+            list_instref,
+            new_inst_method_ref,
+            create_args,
+            &list_typeparams,
+            item_args,
+            Some(pos)
+        )?;
+
+        {
+            let mut st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+            st.instances.insert(list_instref, Arc::new(Mutex::new(list_instance)));
+        }
+
+        let inst_val = Value::obj(list_instref);
+
+        return Ok(inst_val);
+    }
+
     /// Visit a callable call.
     fn visit_callable_call(&mut self, ident_path: &Box<Expression>, args: &Box<Expression>) -> AstResult {
         let (owner_inst, owner_class_name, acckind, callable) = self.resolve_ident_path(ident_path)?;
@@ -1264,7 +1343,7 @@ impl<'a> AstVisitor<'a> {
         // prevent race conditions when locking
         created_inst = match (user_inst_def, core_inst_def) {
             (Some(def), None) => self.create_new_instance(new_instref, def, newup_args, typeparams, Some(ident.file_position.clone()))?,
-            (None, Some(fnref)) => self.create_new_core_instance(new_instref, fnref, newup_args, typeparams, Some(ident.file_position.clone()))?,
+            (None, Some(fnref)) => self.create_new_core_instance(new_instref, fnref, newup_args, typeparams, HashMap::new(), Some(ident.file_position.clone()))?,
             _ => {
                 let err = RuntimeError::new(
                     &format!("Cannot instantiate unknown class `{}`", ident.identifier),
@@ -1286,8 +1365,16 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Create a new core class instance.
-    fn create_new_core_instance(&mut self, instref: InstRef, factory_fn: CoreConstructorFn, args: SahaFunctionArguments, typeparams: &Vec<Box<SahaType>>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError> {
-        return factory_fn(instref, args, typeparams, create_pos);
+    fn create_new_core_instance(
+        &mut self,
+        instref: InstRef,
+        factory_fn: CoreConstructorFn,
+        args: SahaFunctionArguments,
+        typeparams: &Vec<Box<SahaType>>,
+        additional_args: SahaFunctionArguments,
+        create_pos: Option<FilePosition>
+    ) -> Result<Box<dyn SahaObject>, RuntimeError> {
+        return factory_fn(instref, args, typeparams, additional_args, create_pos);
     }
 
     /// Create a new instance from a userland class definition.

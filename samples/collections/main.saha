@@ -2,11 +2,16 @@ function main() int
 {
     var alist'List<int> = [1, 2, 3, 4, 5];
 
+    print(text = alist->count()->toString());
+
     var adict'Dict<str> = {
-        foo: "bar",
-        hello: "world",
-        fizz: "buzz"
+        "foo": "bar",
+        "hello": "world",
+        "fizz": "buzz",
+        "qwer" + "tyui": "special key"
     };
+
+    print(text = adict->get("hello")->unwrap());
 
     return 0;
 }

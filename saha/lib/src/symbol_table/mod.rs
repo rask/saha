@@ -6,6 +6,7 @@
 //! All declarations and globals are stored in the symbol table.
 
 use std::{
+    any::Any,
     collections::HashMap,
     sync::{Arc, Mutex}
 };
@@ -26,7 +27,7 @@ use crate::{
 pub type InstRef = [u8; 16];
 
 /// Helper type for core class constructors.
-pub type CoreConstructorFn = fn(instref: InstRef, args: SahaFunctionArguments, param_types: &Vec<Box<SahaType>>, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>;
+pub type CoreConstructorFn = fn(instref: InstRef, args: SahaFunctionArguments, param_types: &Vec<Box<SahaType>>, additional_data: SahaFunctionArguments, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>;
 
 /// Symbol table, stores global parsed declarations and definitions, in addition
 /// to references to things that should be available globally.
@@ -127,13 +128,14 @@ impl SymbolTable {
         class_name: String,
         args: SahaFunctionArguments,
         type_params: &Vec<Box<SahaType>>,
+        additional_data: SahaFunctionArguments,
         create_pos: &Option<FilePosition>
     ) -> Result<Value, RuntimeError> {
         let def: Option<&ClassDefinition> = self.classes.get(&class_name);
 
         if def.is_none() {
             // no userland definition found, attempt newup for a core instance
-            let core_inst = self.create_core_object_instance(class_name, args, type_params, create_pos);
+            let core_inst = self.create_core_object_instance(class_name, args, type_params, additional_data, create_pos);
 
             if core_inst.is_err() {
                 return Err(core_inst.err().unwrap());
@@ -161,6 +163,7 @@ impl SymbolTable {
         class_name: String,
         args: SahaFunctionArguments,
         type_params: &Vec<Box<SahaType>>,
+        additional_data: SahaFunctionArguments,
         create_pos: &Option<FilePosition>
     ) -> Result<InstRef, RuntimeError> {
         let instref = Self::get_new_uuid_bytes();
@@ -173,7 +176,7 @@ impl SymbolTable {
             return Err(err);
         }
 
-        let inst_result: Result<Box<dyn SahaObject>, RuntimeError> = (def.unwrap())(instref, args, type_params, create_pos.clone());
+        let inst_result: Result<Box<dyn SahaObject>, RuntimeError> = (def.unwrap())(instref, args, type_params, additional_data, create_pos.clone());
 
         match inst_result {
             Ok(inst) => {

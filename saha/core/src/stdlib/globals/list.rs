@@ -23,6 +23,7 @@ pub fn new_instance(
     instref: InstRef,
     args: SahaFunctionArguments,
     type_params: &Vec<Box<SahaType>>,
+    additional_data: SahaFunctionArguments,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 1 {
@@ -37,9 +38,17 @@ pub fn new_instance(
         return Err(err);
     }
 
+    let initial_data: Vec<Value>;
+
+    if additional_data.is_empty() {
+        initial_data = vec![];
+    } else {
+        initial_data = additional_data.iter().map(|(_, i)| i.clone()).collect();
+    }
+
     let list_inst = Box::new(SahaList {
         param_type: type_params[0].clone(),
-        data: vec![],
+        data: initial_data,
         instref: instref
     });
 

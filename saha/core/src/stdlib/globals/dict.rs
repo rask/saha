@@ -23,6 +23,7 @@ pub fn new_instance(
     instref: InstRef,
     args: SahaFunctionArguments,
     type_params: &Vec<Box<SahaType>>,
+    additional_data: SahaFunctionArguments,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 1 {
@@ -37,9 +38,17 @@ pub fn new_instance(
         return Err(err);
     }
 
+    let initial_data: HashMap<String, Value>;
+
+    if additional_data.is_empty() {
+        initial_data = HashMap::new();
+    } else {
+        unimplemented!()
+    }
+
     let dict_inst = Box::new(SahaDict {
         param_type: type_params[0].clone(),
-        data: HashMap::new(),
+        data: initial_data,
         instref: instref
     });
 

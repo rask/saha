@@ -24,6 +24,7 @@ pub fn new_instance(
     instref: InstRef,
     args: SahaFunctionArguments,
     type_params: &Vec<Box<SahaType>>,
+    additional_data: SahaFunctionArguments,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 2 {
