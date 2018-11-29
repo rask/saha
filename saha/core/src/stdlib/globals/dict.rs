@@ -18,7 +18,10 @@ use saha_lib::{
     }
 };
 
-use crate::stdlib::globals::result::SahaResult;
+use crate::stdlib::globals::{
+    result::SahaResult,
+    option::SahaOption
+};
 
 /// Create a new Dict instance.
 pub fn new_instance(
@@ -209,35 +212,32 @@ impl SahaDict {
         return params;
     }
 
-    /// Get an item from the dict. Returns result, where success is the value.
+    /// Get an item from the dict. Returns SahaOption.
     pub fn get(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
         self.get_params().validate_args(&args, access.access_file_pos)?;
 
         let key_str = args.get("key").unwrap().clone().str.unwrap();
 
-        let res_obj: Box<dyn SahaObject>;
-        let res_instref = crate::utils::get_new_instref();
+        let opt_obj: Box<dyn SahaObject>;
+        let opt_instref = crate::utils::get_new_instref();
 
         if self.data.contains_key(&key_str) == false {
-            res_obj = SahaResult::new_failure(
-                res_instref,
-                Value::str(format!("No key `{}` defined", key_str)),
-                self.param_type.clone(),
-                Box::new(SahaType::Str)
+            opt_obj = SahaOption::new_none(
+                opt_instref,
+                self.param_type.clone()
             );
         } else {
             let val = self.data.get(&key_str).unwrap();
 
-            res_obj = SahaResult::new_success(
-                res_instref,
+            opt_obj = SahaOption::new_some(
+                opt_instref,
                 val.clone(),
-                self.param_type.clone(),
-                Box::new(SahaType::Str)
+                self.param_type.clone()
             );
         }
 
-        crate::utils::add_instance_to_symbol_table(res_instref, res_obj);
+        crate::utils::add_instance_to_symbol_table(opt_instref, opt_obj);
 
-        return Ok(Value::obj(res_instref));
+        return Ok(Value::obj(opt_instref));
     }
 }

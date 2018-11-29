@@ -14,5 +14,11 @@ function main() int
     print_line(text = adict->get(key = "hello")->unwrap());
     print_line(text = adict->get(key = "qwertyui")->unwrap());
 
+    var fizzval'Option<str> = adict->get(key = "fizz");
+
+    if (fizzval->is_some()) {
+        print_line(text = fizzval->unwrap());
+    }
+
     return 0;
 }

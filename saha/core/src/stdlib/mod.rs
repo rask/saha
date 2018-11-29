@@ -26,6 +26,7 @@ pub fn register_stdlib() {
     register_list_class();
     register_dict_class();
     register_result_class();
+    register_option_class();
 }
 
 /// Register the stdlib List type.
@@ -47,4 +48,11 @@ fn register_result_class() {
     let mut st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
 
     st.core_classes.insert("Result".to_string(), globals::result::new_instance);
+}
+
+/// Register the stdlib Result type.
+fn register_option_class() {
+    let mut st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+    st.core_classes.insert("Option".to_string(), globals::option::new_instance);
 }
