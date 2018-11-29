@@ -41,11 +41,21 @@ pub fn new_instance(
 
     // FIXME type param validation
 
+    let initial_value: Value;
+    let is_initially_success: bool;
+
+    if additional_data.is_empty() {
+        initial_value = Value::void();
+        is_initially_success = false;
+    } else {
+        unimplemented!()
+    }
+
     let result_inst = Box::new(SahaResult {
         success_type: type_params[0].clone(),
         fail_type: type_params[1].clone(),
-        result_value: Value::void(),
-        is_success: false,
+        result_value: initial_value,
+        is_success: is_initially_success,
         instref: instref
     });
 
@@ -144,6 +154,26 @@ impl SahaObject for SahaResult {
 }
 
 impl SahaResult {
+    pub fn new_failure(instref: InstRef, initial_value: Value, success_type: Box<SahaType>, fail_type: Box<SahaType>) -> Box<dyn SahaObject> {
+        return Box::new(SahaResult {
+            is_success: false,
+            result_value: initial_value,
+            success_type: success_type,
+            fail_type: fail_type,
+            instref: instref
+        });
+    }
+
+    pub fn new_success(instref: InstRef, initial_value: Value, success_type: Box<SahaType>, fail_type: Box<SahaType>) -> Box<dyn SahaObject> {
+        return Box::new(SahaResult {
+            is_success: true,
+            result_value: initial_value,
+            success_type: success_type,
+            fail_type: fail_type,
+            instref: instref
+        });
+    }
+
     /// This defines the parameters the succeed function requires.
     fn succeed_params(&self) -> SahaFunctionParamDefs {
         let mut params = HashMap::new();

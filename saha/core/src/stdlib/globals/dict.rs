@@ -18,6 +18,8 @@ use saha_lib::{
     }
 };
 
+use crate::stdlib::globals::result::SahaResult;
+
 /// Create a new Dict instance.
 pub fn new_instance(
     instref: InstRef,
@@ -43,7 +45,7 @@ pub fn new_instance(
     if additional_data.is_empty() {
         initial_data = HashMap::new();
     } else {
-        unimplemented!()
+        initial_data = additional_data;
     }
 
     let dict_inst = Box::new(SahaDict {
@@ -116,6 +118,7 @@ impl SahaObject for SahaDict {
         match access.member_name as &str {
             "insert" => self.insert(args, access),
             "remove" => self.remove(args, access),
+            "get" => self.get(args, access),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -191,5 +194,50 @@ impl SahaDict {
         self.data.remove(&key_str);
 
         return Ok(Value::void());
+    }
+
+    /// Params for the `get` method.
+    fn get_params(&self) -> SahaFunctionParamDefs {
+        let mut params = HashMap::new();
+
+        params.insert("key".to_string(), FunctionParameter {
+            name: "key".to_string(),
+            param_type: Box::new(SahaType::Str),
+            default: Value::void()
+        });
+
+        return params;
+    }
+
+    /// Get an item from the dict. Returns result, where success is the value.
+    pub fn get(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+        self.get_params().validate_args(&args, access.access_file_pos)?;
+
+        let key_str = args.get("key").unwrap().clone().str.unwrap();
+
+        let res_obj: Box<dyn SahaObject>;
+        let res_instref = crate::utils::get_new_instref();
+
+        if self.data.contains_key(&key_str) == false {
+            res_obj = SahaResult::new_failure(
+                res_instref,
+                Value::str(format!("No key `{}` defined", key_str)),
+                self.param_type.clone(),
+                Box::new(SahaType::Str)
+            );
+        } else {
+            let val = self.data.get(&key_str).unwrap();
+
+            res_obj = SahaResult::new_success(
+                res_instref,
+                val.clone(),
+                self.param_type.clone(),
+                Box::new(SahaType::Str)
+            );
+        }
+
+        crate::utils::add_instance_to_symbol_table(res_instref, res_obj);
+
+        return Ok(Value::obj(res_instref));
     }
 }

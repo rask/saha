@@ -430,6 +430,7 @@ impl<'a> AstVisitor<'a> {
             ExpressionKind::NewInstance(ident, args, typeparams) => self.visit_instance_newup(ident, args, typeparams),
             ExpressionKind::ObjectAccess(lhs, accesskind, rhs) => self.visit_generic_object_access(lhs, accesskind, rhs),
             ExpressionKind::ListDeclaration(item_exprs) => self.visit_list_shorthand_expression(item_exprs, expr_position),
+            ExpressionKind::DictDeclaration(item_exprs) => self.visit_dict_shorthand_expression(item_exprs, expr_position),
             _ => unimplemented!("{:?}", expression.kind)
         }
     }
@@ -906,6 +907,7 @@ impl<'a> AstVisitor<'a> {
         let mut item_args: SahaFunctionArguments = HashMap::new();
         let mut idx = 0;
 
+        // this is a hack to make the items fit into a hashmap
         items.into_iter().for_each(|i| {
             item_args.insert("item_".to_string() + idx.to_string().as_str(), i.clone());
 
@@ -939,6 +941,92 @@ impl<'a> AstVisitor<'a> {
         }
 
         let inst_val = Value::obj(list_instref);
+
+        return Ok(inst_val);
+    }
+
+    /// Visit a dictionary shorthand declaration (`{...}` delimited).
+    fn visit_dict_shorthand_expression(&mut self, items_exprs: &Vec<(Box<Expression>, Box<Expression>)>, pos: FilePosition) -> AstResult {
+        let mut value_hmap: HashMap<String, Value> = HashMap::new();
+        let mut dict_type: Option<Box<SahaType>> = None;
+
+        if items_exprs.is_empty() {
+            let err = RuntimeError::new(
+                "Dict shorthand expressions cannot be used for empty dict declarations",
+                Some(pos)
+            );
+
+            return Err(err);
+        }
+
+        for (k_expr, i_expr) in items_exprs {
+            let k_pos = k_expr.file_position.clone();
+            let k_val: Value = self.visit_expression(k_expr)?;
+            let i_val: Value = self.visit_expression(i_expr)?;
+
+            match *k_val.kind {
+                SahaType::Str => {},
+                _ => {
+                    let err = RuntimeError::new(
+                        &format!("Dict keys must be strings, `{}` received instead", k_val.kind.to_readable_string()),
+                        Some(k_pos)
+                    );
+
+                    return Err(err);
+                }
+            };
+
+            if dict_type.is_none() {
+                dict_type = Some(i_val.kind.clone());
+            }
+
+            value_hmap.insert(k_val.str.unwrap(), i_val.clone());
+        }
+
+        let dict_type = dict_type.unwrap(); // be wary here, but we have items so we presumably have a type as well
+
+        for (_, i) in &value_hmap {
+            if i.kind != dict_type {
+                let err = RuntimeError::new(
+                    &format!(
+                        "Dict expects values of type {}, but received {} instead",
+                        dict_type.to_readable_string(),
+                        i.kind.to_readable_string()
+                    ),
+                    Some(pos)
+                );
+
+                return Err(err);
+            }
+        }
+
+        let dict_instref: InstRef;
+        let dict_typeparams = vec![dict_type.clone()];
+        let create_args = HashMap::new();
+        let new_inst_method_ref: CoreConstructorFn;
+
+        {
+            let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+            dict_instref = st.create_instref();
+            new_inst_method_ref = st.core_classes.get("Dict").unwrap().clone();
+        };
+
+        let dict_instance = self.create_new_core_instance(
+            dict_instref,
+            new_inst_method_ref,
+            create_args,
+            &dict_typeparams,
+            value_hmap,
+            Some(pos)
+        )?;
+
+        {
+            let mut st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
+            st.instances.insert(dict_instref, Arc::new(Mutex::new(dict_instance)));
+        }
+
+        let inst_val = Value::obj(dict_instref);
 
         return Ok(inst_val);
     }

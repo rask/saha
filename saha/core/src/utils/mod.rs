@@ -1,6 +1,9 @@
 //! stdlib utils
 
-use std::collections::HashMap;
+use std::{
+    sync::{Arc, Mutex},
+    collections::HashMap
+};
 
 use saha_lib::{
     errors::RuntimeError,
@@ -13,9 +16,29 @@ use saha_lib::{
             FunctionParameter,
             SahaCallResult,
             CoreFunction
+        },
+        objects::{
+            SahaObject
         }
     }
 };
+
+/// Get a new InstRef to be used on a new instance.
+pub fn get_new_instref() -> InstRef {
+    let st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+    return st.create_instref();
+}
+
+/// Insert an created saha object instance to the global symbol table and get
+/// the instref value object for it.
+pub fn add_instance_to_symbol_table(instref: InstRef, inst: Box<dyn SahaObject>) -> Value {
+    let mut st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
+
+    st.instances.insert(instref, Arc::new(Mutex::new(inst)));
+
+    return Value::obj(instref);
+}
 
 /// Create a new core function to be inserted into the global symbol table as a
 /// SahaCallable.

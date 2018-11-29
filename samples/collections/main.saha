@@ -2,7 +2,7 @@ function main() int
 {
     var alist'List<int> = [1, 2, 3, 4, 5];
 
-    print(text = alist->count()->toString());
+    print_line(text = alist->count()->toString());
 
     var adict'Dict<str> = {
         "foo": "bar",
@@ -11,7 +11,8 @@ function main() int
         "qwer" + "tyui": "special key"
     };
 
-    print(text = adict->get("hello")->unwrap());
+    print_line(text = adict->get(key = "hello")->unwrap());
+    print_line(text = adict->get(key = "qwertyui")->unwrap());
 
     return 0;
 }
