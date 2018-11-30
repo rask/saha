@@ -121,8 +121,6 @@ impl SahaObject for SahaList {
             // FIXME struct state does not seem to pass trait boundary here
             "push" => self.push(args, access),
             "count" => self.count(args, access),
-            "next" => self.next(args, access),
-            "reset" => self.reset(args, access),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -142,6 +140,14 @@ impl SahaObject for SahaList {
 
     fn box_clone(&self) -> Box<dyn SahaObject> {
         return Box::new(self.clone());
+    }
+
+    fn into_iter(&self) -> Box<Iterator<Item = (Value, Value)>> {
+        return Box::new(self.data.clone().into_iter().enumerate().map(|(idx, val)| (Value::int(idx as isize), val)));
+    }
+
+    fn set_data_from_iter(&mut self, iterator: Box<Iterator<Item = (Value, Value)>>) {
+        self.data = iterator.map(|(_, val)| val).collect();
     }
 }
 
@@ -179,41 +185,5 @@ impl SahaList {
         let count = self.data.len();
 
         return Ok(Value::int(count as isize));
-    }
-
-    /// The List::next method.
-    pub fn next(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
-        let params: SahaFunctionParamDefs = HashMap::new(); // no params
-
-        params.validate_args(&args, access.access_file_pos)?;
-
-        let opt_obj: Box<dyn SahaObject>;
-        let opt_instref = crate::utils::get_new_instref();
-        let idx = self.cursor_position;
-
-        if self.data.len() <= idx + 1 {
-            opt_obj = SahaOption::new_none(opt_instref, self.param_type.clone());
-        } else {
-            let next_val = self.data[idx].clone();
-
-            opt_obj = SahaOption::new_some(opt_instref, next_val, self.param_type.clone());
-
-            self.cursor_position += 1;
-        }
-
-        crate::utils::add_instance_to_symbol_table(opt_instref, opt_obj);
-
-        return Ok(Value::obj(opt_instref));
-    }
-
-    /// Reset the internal cursor for this list.
-    pub fn reset(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
-        let params: SahaFunctionParamDefs = HashMap::new(); // no params
-
-        params.validate_args(&args, access.access_file_pos)?;
-
-        self.cursor_position += 1;
-
-        return Ok(Value::void());
     }
 }

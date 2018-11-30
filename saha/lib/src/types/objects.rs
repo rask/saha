@@ -70,6 +70,14 @@ pub trait SahaObject: Send {
 
     /// Clone for boxed self.
     fn box_clone(&self) -> Box<dyn SahaObject>;
+
+    /// Convert iterable objects into a Rust iterator for data handling inside loops and similar
+    /// constructs.
+    fn into_iter(&self) -> Box<Iterator<Item = (Value, Value)>>;
+
+    /// Load object data from an iterator. Only implemented for iterable type objects such as `List`
+    /// and `Dict`.
+    fn set_data_from_iter(&mut self, iterator: Box<Iterator<Item = (Value, Value)>>);
 }
 
 impl Clone for Box<dyn SahaObject> {
@@ -637,5 +645,13 @@ impl SahaObject for UserInstance {
 
     fn box_clone(&self) -> Box<dyn SahaObject> {
         return Box::new(self.clone());
+    }
+
+    fn into_iter(&self) -> Box<Iterator<Item = (Value, Value)>> {
+        unimplemented!()
+    }
+
+    fn set_data_from_iter(&mut self, iterator: Box<Iterator<Item = (Value, Value)>>) {
+        unimplemented!()
     }
 }

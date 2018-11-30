@@ -122,8 +122,6 @@ impl SahaObject for SahaDict {
             "insert" => self.insert(args, access),
             "remove" => self.remove(args, access),
             "get" => self.get(args, access),
-            "next" => unimplemented!(),
-            "reset" => unimplemented!(),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -143,6 +141,14 @@ impl SahaObject for SahaDict {
 
     fn box_clone(&self) -> Box<dyn SahaObject> {
         return Box::new(self.clone());
+    }
+
+    fn into_iter(&self) -> Box<Iterator<Item = (Value, Value)>> {
+        return Box::new(self.data.clone().into_iter().map(|(key, val)| (Value::str(key), val)));
+    }
+
+    fn set_data_from_iter(&mut self, iterator: Box<Iterator<Item = (Value, Value)>>) {
+        self.data = iterator.map(|(key, val)| (key.str.unwrap(), val)).collect();
     }
 }
 

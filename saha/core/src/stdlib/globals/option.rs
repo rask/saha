@@ -157,6 +157,14 @@ impl SahaObject for SahaOption {
     fn box_clone(&self) -> Box<dyn SahaObject> {
         return Box::new(self.clone());
     }
+
+    fn into_iter(&self) -> Box<Iterator<Item = (Value, Value)>> {
+        unimplemented!()
+    }
+
+    fn set_data_from_iter(&mut self, iterator: Box<Iterator<Item = (Value, Value)>>) {
+        unimplemented!()
+    }
 }
 
 impl SahaOption {

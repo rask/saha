@@ -451,9 +451,6 @@ impl<'a> AstVisitor<'a> {
     fn visit_for_statement(&mut self, k_name: &Identifier, v_name: &Identifier, iterable_expr: &Box<Expression>, for_block: &Box<Block>) -> BailableAstResult {
         let iterable = self.visit_expression(iterable_expr)?;
 
-        let mut iterable_is_list = false;
-        let mut iterable_is_dict = false;
-
         match *iterable.kind {
             SahaType::Obj => {
                 let iterable_impl = self.get_object_implements(&iterable);
@@ -463,12 +460,6 @@ impl<'a> AstVisitor<'a> {
 
                     return Err(err);
                 }
-
-                if iterable_impl.contains(&"List".to_string()) {
-                    iterable_is_list = true;
-                } else if iterable_impl.contains(&"Dict".to_string()) {
-                    iterable_is_dict = true;
-                }
             },
             _ => {
                 let err = RuntimeError::new("Cannot loop over a non-iterable value", Some(iterable_expr.file_position.clone()));
@@ -477,75 +468,32 @@ impl<'a> AstVisitor<'a> {
             }
         };
 
-        if iterable_is_list {
-            return self.visit_for_list_statement(k_name, v_name, iterable, for_block);
-        } else if iterable_is_dict {
-            return self.visit_for_dict_statement(k_name, v_name, iterable, for_block);
-        }
-
-        let err = RuntimeError::new("Cannot loop over a non-iterable value", Some(iterable_expr.file_position.clone()));
-
-        return Err(err);
+        return self.visit_for_iterable_statement(k_name, v_name, iterable, for_block);
     }
 
     /// Visit a for loop over a List.
-    fn visit_for_list_statement(&mut self, k_name: &Identifier, v_name: &Identifier, iterable: Value, for_block: &Box<Block>) -> BailableAstResult {
-        let mut idx = 0;
+    fn visit_for_iterable_statement(&mut self, k_name: &Identifier, v_name: &Identifier, iterable: Value, for_block: &Box<Block>) -> BailableAstResult {
+        let inst_lockable = self.get_instance_lockable_ref(&iterable.obj.unwrap(), for_block.file_position.clone())?;
+        let inst = inst_lockable.lock().unwrap();
+        let mut inst_iterable = inst.into_iter();
 
-        loop {
-            let next_val = self.call_method(&iterable, &AccessKind::Instance, &Identifier {
-                identifier: "next".to_string(),
-                file_position: FilePosition::unknown(),
-                type_params: Vec::new(),
-            }, HashMap::new())?;
+        drop(inst); // FIXME can we somehow prevent dataraces here even with dropping?
 
-            let is_some = self.call_method(&next_val, &AccessKind::Instance, &Identifier {
-                identifier: "isSome".to_string(),
-                file_position: FilePosition::unknown(),
-                type_params: Vec::new(),
-            }, HashMap::new())?;
-
-            let is_some = match *is_some.kind {
-                SahaType::Bool => is_some.bool.unwrap(),
-                _ => false
-            };
-
-            if is_some == false {
-                break;
+        let for_result: Result<(_, _), RuntimeError> = inst_iterable.try_fold((Value::void(), false), |carry, (idx, val)| {
+            if carry.1 == true {
+                // there was a bail, so stop processing the loop
+                return Ok(carry);
             }
-
-            let next_val = self.call_method(&next_val, &AccessKind::Instance, &Identifier {
-                identifier: "unwrap".to_string(),
-                file_position: FilePosition::unknown(),
-                type_params: Vec::new(),
-            }, HashMap::new())?;
 
             let mut inject = HashMap::new();
 
-            inject.insert(k_name.identifier.clone(), (Value::int(idx), k_name.file_position.clone()));
-            inject.insert(v_name.identifier.clone(), (next_val, v_name.file_position.clone()));
+            inject.insert(k_name.identifier.clone(), (idx, k_name.file_position.clone()));
+            inject.insert(v_name.identifier.clone(), (val, v_name.file_position.clone()));
 
-            let (block_res, should_bail) = self.visit_block(for_block, inject)?;
+            return self.visit_block(for_block, inject);
+        });
 
-            if should_bail {
-                return Ok((block_res, true));
-            }
-
-            idx += 1;
-        }
-
-        self.call_method(&iterable, &AccessKind::Instance, &Identifier {
-            identifier: "reset".to_string(),
-            file_position: FilePosition::unknown(),
-            type_params: Vec::new(),
-        }, HashMap::new())?;
-
-        return Ok((Value::void(), false));
-    }
-
-    /// Visit a for loop over a dict.
-    fn visit_for_dict_statement(&mut self, k_name: &Identifier, v_name: &Identifier, iterable: Value, for_block: &Box<Block>) -> BailableAstResult {
-        unimplemented!()
+        return for_result;
     }
 
     /// Visit an expression.
