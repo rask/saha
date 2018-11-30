@@ -18,6 +18,8 @@ use saha_lib::{
     }
 };
 
+use crate::stdlib::globals::option::SahaOption;
+
 /// Create a new List instance.
 pub fn new_instance(
     instref: InstRef,
@@ -49,7 +51,8 @@ pub fn new_instance(
     let list_inst = Box::new(SahaList {
         param_type: type_params[0].clone(),
         data: initial_data,
-        instref: instref
+        instref: instref,
+        cursor_position: 0
     });
 
     return Ok(list_inst);
@@ -60,7 +63,8 @@ pub fn new_instance(
 struct SahaList {
     instref: InstRef,
     param_type: Box<SahaType>,
-    pub data: Vec<Value>
+    pub data: Vec<Value>,
+    pub cursor_position: usize,
 }
 
 impl SahaObject for SahaList {
@@ -115,10 +119,10 @@ impl SahaObject for SahaList {
 
         match access.member_name as &str {
             // FIXME struct state does not seem to pass trait boundary here
-            "push" => list_push(list_type, &mut self.data, args, access),
-            "count" => list_count(&self.data, args, access),
-            //"push" => self.push(access, args),
-            //"count" => self.count(access, args),
+            "push" => self.push(args, access),
+            "count" => self.count(args, access),
+            "next" => self.next(args, access),
+            "reset" => self.reset(args, access),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -141,37 +145,75 @@ impl SahaObject for SahaList {
     }
 }
 
-/// Get function parameter definition for the List::push method.
-fn list_push_params(ty: &Box<SahaType>) -> SahaFunctionParamDefs {
-    let mut params: SahaFunctionParamDefs = HashMap::new();
+impl SahaList {
+    /// Get function parameter definition for the List::push method.
+    fn push_params(&self) -> SahaFunctionParamDefs {
+        let mut params: SahaFunctionParamDefs = HashMap::new();
 
-    params.insert("value".to_string(), FunctionParameter {
-        name: "value".to_string(),
-        param_type: ty.clone(),
-        default: Value::void()
-    });
+        params.insert("value".to_string(), FunctionParameter {
+            name: "value".to_string(),
+            param_type: self.param_type.clone(),
+            default: Value::void()
+        });
 
-    return params;
-}
+        return params;
+    }
 
-/// The List::push "method".
-fn list_push(ty: Box<SahaType>, data: &mut Vec<Value>, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
-    list_push_params(&ty).validate_args(&args, access.access_file_pos)?;
+    /// The List::push "method".
+    pub fn push(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+        self.push_params().validate_args(&args, access.access_file_pos)?;
 
-    let pushed_val = args.get("value").unwrap();
+        let pushed_val = args.get("value").unwrap();
 
-    data.push(pushed_val.clone());
+        self.data.push(pushed_val.clone());
 
-    return Ok(Value::void());
-}
+        return Ok(Value::void());
+    }
 
-/// The List::count "method".
-fn list_count(data: &Vec<Value>, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
-    let params: SahaFunctionParamDefs = HashMap::new(); // no params
+    /// The List::count "method".
+    pub fn count(&self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+        let params: SahaFunctionParamDefs = HashMap::new(); // no params
 
-    params.validate_args(&args, access.access_file_pos)?;
+        params.validate_args(&args, access.access_file_pos)?;
 
-    let count = data.len();
+        let count = self.data.len();
 
-    return Ok(Value::int(count as isize));
+        return Ok(Value::int(count as isize));
+    }
+
+    /// The List::next method.
+    pub fn next(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+        let params: SahaFunctionParamDefs = HashMap::new(); // no params
+
+        params.validate_args(&args, access.access_file_pos)?;
+
+        let opt_obj: Box<dyn SahaObject>;
+        let opt_instref = crate::utils::get_new_instref();
+        let idx = self.cursor_position;
+
+        if self.data.len() <= idx + 1 {
+            opt_obj = SahaOption::new_none(opt_instref, self.param_type.clone());
+        } else {
+            let next_val = self.data[idx].clone();
+
+            opt_obj = SahaOption::new_some(opt_instref, next_val, self.param_type.clone());
+
+            self.cursor_position += 1;
+        }
+
+        crate::utils::add_instance_to_symbol_table(opt_instref, opt_obj);
+
+        return Ok(Value::obj(opt_instref));
+    }
+
+    /// Reset the internal cursor for this list.
+    pub fn reset(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+        let params: SahaFunctionParamDefs = HashMap::new(); // no params
+
+        params.validate_args(&args, access.access_file_pos)?;
+
+        self.cursor_position += 1;
+
+        return Ok(Value::void());
+    }
 }

@@ -262,7 +262,8 @@ impl<'a> AstVisitor<'a> {
             StatementKind::Loop(loop_block) => self.visit_loop_statement(loop_block)?,
             StatementKind::Break => (Value::void(), true),
             StatementKind::Continue => (Value::void(), false),
-            _ => unimplemented!("{:?}", statement.kind)
+            StatementKind::For(k_name, v_name, iter_expr, block) => self.visit_for_statement(k_name, v_name, iter_expr, block)?
+            //_ => unimplemented!("{:?}", statement.kind)
         };
 
         return Ok((res, bail));
@@ -417,6 +418,61 @@ impl<'a> AstVisitor<'a> {
         }
 
         return Ok((loop_val, false));
+    }
+
+    /// Visit a for loop.
+    fn visit_for_statement(&mut self, k_name: &Identifier, v_name: &Identifier, iterable_expr: &Box<Expression>, for_block: &Box<Block>) -> BailableAstResult {
+        let iterable = self.visit_expression(iterable_expr)?;
+
+        let mut iterable_is_list = false;
+        let mut iterable_is_dict = false;
+
+        match *iterable.kind {
+            SahaType::Obj => {
+                let iterable_impl = self.get_object_implements(&iterable);
+
+                if iterable_impl.contains(&"List".to_string()) == false && iterable_impl.contains(&"Dict".to_string()) == false {
+                    let err = RuntimeError::new("Cannot loop over a non-iterable value", Some(iterable_expr.file_position.clone()));
+
+                    return Err(err);
+                }
+
+                if iterable_impl.contains(&"List".to_string()) {
+                    iterable_is_list = true;
+                } else if iterable_impl.contains(&"Dict".to_string()) {
+                    iterable_is_dict = true;
+                }
+            },
+            _ => {
+                let err = RuntimeError::new("Cannot loop over a non-iterable value", Some(iterable_expr.file_position.clone()));
+
+                return Err(err);
+            }
+        };
+
+        if iterable_is_list {
+            return self.visit_for_list_statement(k_name, v_name, iterable, for_block);
+        } else if iterable_is_dict {
+            return self.visit_for_dict_statement(k_name, v_name, iterable, for_block);
+        }
+
+        let err = RuntimeError::new("Cannot loop over a non-iterable value", Some(iterable_expr.file_position.clone()));
+
+        return Err(err);
+    }
+
+    /// Visit a for loop over a List.
+    fn visit_for_list_statement(&mut self, k_name: &Identifier, v_name: &Identifier, iterable: Value, for_block: &Box<Block>) -> BailableAstResult {
+        let mut idx = 0;
+
+        self.set_local_ref(k_name.identifier.clone(), Value::int(idx), &k_name.file_position);
+
+        unimplemented!()
+    }
+
+    /// Visit a for loop over a dict.
+    fn visit_for_dict_statement(&mut self, k_name: &Identifier, v_name: &Identifier, iterable: Value, for_block: &Box<Block>) -> BailableAstResult {
+        unimplemented!()
     }
 
     /// Visit an expression.

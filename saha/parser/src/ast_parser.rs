@@ -210,7 +210,7 @@ impl<'a> AstParser<'a> {
                 Token::KwVar(..) => self.parse_variable_declaration_statement()?,
                 Token::KwIf(..) => self.parse_if_statement()?,
                 Token::KwLoop(..) => self.parse_loop_statement()?,
-                Token::KwFor(..) => unimplemented!(),
+                Token::KwFor(..) => self.parse_for_statement()?,
                 Token::KwReturn(..) => self.parse_return_statement()?,
                 Token::KwBreak(..) => self.parse_break_statement()?,
                 Token::KwContinue(..) => self.parse_continue_statement()?,
@@ -452,6 +452,56 @@ impl<'a> AstParser<'a> {
             kind: StatementKind::Loop(loop_block),
             file_position: loop_pos
         }));
+    }
+
+    /// Parse a for loop statement.
+    fn parse_for_statement(&mut self) -> PR<Box<Statement>> {
+        self.consume_next(vec!["for"])?;
+
+        let for_pos = self.ctok.unwrap().get_file_position();
+
+        self.consume_next(vec!["("])?;
+        self.consume_next(vec!["name"])?;
+
+        let kname = match self.ctok.unwrap() {
+            Token::Name(_, _, n) => n.clone(),
+            _ => unreachable!()
+        };
+
+        let kident = Identifier {
+            file_position: self.ctok.unwrap().get_file_position(),
+            identifier: kname,
+            type_params: Vec::new()
+        };
+
+        self.consume_next(vec![","])?;
+        self.consume_next(vec!["name"])?;
+
+        let vname = match self.ctok.unwrap() {
+            Token::Name(_, _, n) => n.clone(),
+            _ => unreachable!()
+        };
+
+        let vident = Identifier {
+            file_position: self.ctok.unwrap().get_file_position(),
+            identifier: vname,
+            type_params: Vec::new()
+        };
+
+        self.consume_next(vec!["in"])?;
+
+        let iterable_expr = self.parse_expression(0)?;
+
+        self.consume_next(vec![")"])?;
+
+        let for_block = self.parse_block(false)?;
+
+        let stmt = Statement {
+            kind: StatementKind::For(kident, vident, iterable_expr, for_block.1),
+            file_position: for_pos
+        };
+
+        return Ok(Box::new(stmt));
     }
 
     /// Parse an expression.

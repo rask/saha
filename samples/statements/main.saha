@@ -80,6 +80,10 @@ function main() int
         print_line(text = "SUCCESS");
     }
 
+    for (k, v in ["hello", "world"]) {
+        print_line(k->toString() + ": " + v);
+    }
+
     var counter'int = 0;
 
     loop {
