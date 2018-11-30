@@ -122,8 +122,8 @@ impl SahaObject for SahaOption {
             }
         } else {
             match access.member_name as &str {
-                "is_some" => self.is_some(),
-                "is_none" => self.is_none(),
+                "isSome" => self.is_some(),
+                "isNone" => self.is_none(),
                 "unwrap" => {
                     if self.is_some == false {
                         let err = RuntimeError::new(

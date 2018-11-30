@@ -7,7 +7,7 @@ function main() int
     var success'int;
     var failed'bool;
 
-    if (res->is_success()) {
+    if (res->isSuccess()) {
         success = res->unwrap();
         failed = false;
     } else {

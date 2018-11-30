@@ -35,10 +35,10 @@ pub struct FunctionParameter {
 /// Anything that needs to validate call arguments.
 pub trait ValidatesArgs {
     /// Validate a collection of function/method call arguments.
-    fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError>;
+    fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<SahaFunctionArguments, RuntimeError>;
 
     /// Validate args in case there is only a single parameter defined.
-    fn validate_single_param_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError>;
+    fn validate_single_param_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<SahaFunctionArguments, RuntimeError>;
 }
 
 /// Anything which can be called in Saha. Functions and methods mainly.
@@ -122,14 +122,14 @@ pub struct UserFunction {
 
 impl SahaCallable for CoreFunction {
     fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
-        self.params.validate_args(&args, &call_source_position)?;
+        let validated_args = self.params.validate_args(&args, &call_source_position)?;
 
         let ret_type = match &return_type {
             Some(t) => t.clone(),
             None => self.return_type.clone()
         };
 
-        let res = (self.fn_ref)(args.clone())?;
+        let res = (self.fn_ref)(validated_args.clone())?;
 
         match *res.kind {
             SahaType::Obj => {
@@ -231,7 +231,7 @@ impl SahaCallable for CoreFunction {
 
 impl SahaCallable for UserFunction {
     fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
-        self.params.validate_args(&args, &call_source_position)?;
+        let validated_args = self.params.validate_args(&args, &call_source_position)?;
 
         let ret_type = match &return_type {
             Some(t) => t.clone(),
@@ -239,7 +239,7 @@ impl SahaCallable for UserFunction {
         };
 
         // clone the args to miminize possibility of side effects
-        let mut ast_visitor = AstVisitor::new(&self.ast, args.clone());
+        let mut ast_visitor = AstVisitor::new(&self.ast, validated_args.clone());
 
         let res = ast_visitor.start()?;
 
@@ -351,8 +351,9 @@ impl SahaCallable for UserFunction {
 impl ValidatesArgs for SahaFunctionParamDefs {
     /// Validate args in a situation where there is only a single parameter defined, which means
     /// we can call the function with no parameter name defined (to make code a little leaner).
-    fn validate_single_param_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
+    fn validate_single_param_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<SahaFunctionArguments, RuntimeError> {
         let mut validation_args: SahaFunctionArguments = args.clone();
+        let mut validated_args = args.clone();
 
         if validation_args.contains_key("self") {
             // remove self or this single params validation will explode randomly as the arg order
@@ -374,9 +375,6 @@ impl ValidatesArgs for SahaFunctionParamDefs {
                 );
 
                 return Err(err);
-            } else {
-                // no arg given, but a default is provided, so we're good
-                return Ok(());
             }
         }
 
@@ -397,13 +395,18 @@ impl ValidatesArgs for SahaFunctionParamDefs {
             return Err(err);
         }
 
-        // all OK for this arg
+        // all OK for this arg, just replace the given arg with a name in case the
+        // given arg was an unnamed arg
+        if validation_args.contains_key("") {
+            validated_args.insert(param_name.clone(), validation_args.get("").unwrap().clone());
+            validated_args.remove("");
+        }
 
-        return Ok(());
+        return Ok(validated_args.clone());
     }
 
-    fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
-        if self.keys().len() == 1 {
+    fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<SahaFunctionArguments, RuntimeError> {
+        if (args.len() == 1 && args.contains_key("self") == false) || (args.len() == 2 && args.contains_key("self")) {
             // if a function accepts only a single argument, we allow calling without setting a
             // parameter name (will use `""` internally)
             return self.validate_single_param_args(&args, call_pos);
@@ -448,6 +451,6 @@ impl ValidatesArgs for SahaFunctionParamDefs {
             // all OK for this arg, continue loop
         }
 
-        return Ok(());
+        return Ok(args.clone());
     }
 }

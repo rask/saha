@@ -103,10 +103,10 @@ impl Property {
 pub type ObjProperties = HashMap<String, Property>;
 
 impl ValidatesArgs for ObjProperties {
-    fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
+    fn validate_args(&self, args: &SahaFunctionArguments, call_pos: &Option<FilePosition>) -> Result<SahaFunctionArguments, RuntimeError> {
         if self.len() == 0 && args.len() == 0 {
             // no args expected, and none given, so we're ok
-            return Ok(());
+            return Ok(args.clone());
         }
 
         if args.len() > self.len() {
@@ -199,11 +199,11 @@ impl ValidatesArgs for ObjProperties {
             };
         }
 
-        return Ok(());
+        return Ok(args.clone());
     }
 
-    fn validate_single_param_args(&self, _args: &SahaFunctionArguments, _call_pos: &Option<FilePosition>) -> Result<(), RuntimeError> {
-        return Ok(());
+    fn validate_single_param_args(&self, args: &SahaFunctionArguments, _call_pos: &Option<FilePosition>) -> Result<SahaFunctionArguments, RuntimeError> {
+        return Ok(args.clone());
     }
 }
 
@@ -391,10 +391,15 @@ impl SahaObject for UserInstance {
     }
 
     fn get_named_type(&self) -> Box<SahaType> {
+        // we need this sorting hassle to keep the param type items in the exact correct order
+        // every time, hashmaps suck at sorting
+        let mut ty: Vec<(char, Box<SahaType>)> = self.type_params.clone().into_iter().map(|(k, t)| (k, t)).collect();
+        ty.sort_by(|a, b| a.0.cmp(&b.0));
+
         return Box::new(SahaType::Name(
             self.fq_class_name.clone(),
-            self.type_params.clone().into_iter().map(|(_, t)| t).collect())
-        );
+            ty.iter().map(|(_, t)| t.clone()).collect()
+        ));
     }
 
     fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {

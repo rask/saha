@@ -49,6 +49,7 @@ pub struct RootParser<'a> {
     ctok: Option<&'a Token>,
     ptok: Option<&'a Token>,
     ntok: Option<&'a Token>,
+    tokidx: usize,
     parse_table: &'a mut ParseTable,
     tokens: Peekable<Iter<'a, Token>>
 }
@@ -88,6 +89,8 @@ impl<'a> ParsesTokens for RootParser<'a> {
             self.ntok = Some(next.unwrap().clone());
         }
 
+        self.advance_token_index();
+
         return Ok(());
     }
 
@@ -114,7 +117,13 @@ impl<'a> ParsesTokens for RootParser<'a> {
             self.ntok = Some(next.unwrap().clone());
         }
 
+        self.advance_token_index();
+
         return Ok(());
+    }
+
+    fn advance_token_index(&mut self) {
+        self.tokidx += 1;
     }
 }
 
@@ -124,6 +133,7 @@ impl<'a> RootParser<'a> {
             ctok: None,
             ptok: None,
             ntok: None,
+            tokidx: 0,
             parse_table: parse_table,
             tokens: tokens.iter().peekable()
         };

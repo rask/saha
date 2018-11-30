@@ -111,13 +111,16 @@ impl<'a> AstVisitor<'a> {
             (SahaType::Name(ref exp_name, ref exp_tp), SahaType::Name(ref act_name, ref act_tp)) => exp_name == act_name && exp_tp == act_tp,
             (SahaType::Name(exp_name, exp_tp), SahaType::Obj) => {
                 let impl_list = self.get_object_implements(&value);
-                let inst_typedname = self.get_object_named_type(&value);
+                let inst_typedname: Box<SahaType> = self.get_object_named_type(&value);
 
                 if impl_list.contains(exp_name) == false {
                     return false;
                 }
 
-                *expected == *inst_typedname
+                match *inst_typedname {
+                    SahaType::Name(n, tp) => n == *exp_name && tp == *exp_tp,
+                    _ => false
+                }
             },
             _ => false
         };

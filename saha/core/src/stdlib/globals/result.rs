@@ -127,8 +127,8 @@ impl SahaObject for SahaResult {
             match access.member_name as &str {
                 "succeed" => self.succeed(args, access),
                 "fail" => self.fail(args, access),
-                "is_success" => Ok(Value::bool(self.is_success)),
-                "is_failed" => Ok(Value::bool(!self.is_success)),
+                "isSuccess" => Ok(Value::bool(self.is_success)),
+                "isFailed" => Ok(Value::bool(!self.is_success)),
                 "unwrap" => Ok(self.result_value.clone()),
                 _ => {
                     Err(RuntimeError::new(

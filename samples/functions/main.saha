@@ -1,11 +1,24 @@
+function another_func(value1'str, value2'str)
+{
+    print_line(value1 + value2);
+}
+
 function myfunc(text'str)
 {
-    print(text = text);
+    print_line(text);
 }
 
 function main() int
 {
-    myfunc(text = "howdy");
+    another_func(value1 = "foo", value2 = "bar");
+
+    // we can leave the param name out for functions that accept a single arg
+    myfunc("howdy");
+
+    another_func(value1 = "hello", value2 = "world");
+
+    myfunc("sdfjsjkgsgj");
+    myfunc(text = "ajkflkjlkjlkjlkj");
 
     return 0;
 }

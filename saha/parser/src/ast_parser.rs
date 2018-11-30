@@ -40,6 +40,8 @@ pub struct AstParser<'a> {
     ctok: Option<&'a Token>,
     ptok: Option<&'a Token>,
     ntok: Option<&'a Token>,
+    tokidx: usize,
+    shadow: &'a Vec<Token>,
     tokens: Peekable<Iter<'a, Token>>
 }
 
@@ -78,6 +80,8 @@ impl<'a> ParsesTokens for AstParser<'a> {
             self.ntok = Some(next.unwrap().clone());
         }
 
+        self.advance_token_index();
+
         return Ok(());
     }
 
@@ -104,7 +108,13 @@ impl<'a> ParsesTokens for AstParser<'a> {
             self.ntok = Some(next.unwrap().clone());
         }
 
+        self.advance_token_index();
+
         return Ok(());
+    }
+
+    fn advance_token_index(&mut self) {
+        self.tokidx += 1;
     }
 }
 
@@ -114,6 +124,8 @@ impl<'a> AstParser<'a> {
             ctok: None,
             ptok: None,
             ntok: None,
+            shadow: &tokens,
+            tokidx: 0,
             tokens: tokens.iter().peekable()
         };
     }
@@ -804,7 +816,11 @@ impl<'a> AstParser<'a> {
 
                     args.push(arg_expr);
 
-                    continue
+                    if allow_unnamed_single_param && is_named_arg == false {
+                        break
+                    } else {
+                        continue
+                    }
                 }
             }
         };
@@ -819,28 +835,52 @@ impl<'a> AstParser<'a> {
 
     /// Parse a single function call argument.
     fn parse_callable_arg(&mut self) -> PR<(bool, Box<Expression>)> {
-        self.consume_next(vec!["name"])?;
+        // right now we need to see if the next thing is a param name or a value
+        // expression, meaning we need to check if the next token is a name
+        // and if it is whether the one after that is an assignment token
+        let is_named_arg = match self.ntok.unwrap() {
+            Token::Name(..) => {
+                // we assume there should be an `=` token after the current one
+                // if we're working with a named arg
+                let assign_pos_token = self.shadow[self.tokidx + 1].clone();
 
-        let argname: String = String::new();
-        let argpos: FilePosition = FilePosition::unknown();
-
-        let (argname, argpos) = match self.ctok.unwrap() {
-            Token::Name(pos, _, name) => (name, pos),
-            _ => unreachable!()
+                match assign_pos_token {
+                    Token::Assign(..) => true,
+                    _ => false
+                }
+            },
+            _ => false
         };
 
-        self.consume_next(vec!["="])?;
+        let mut argname = "".to_string();
+        let mut argpos = self.ntok.unwrap().get_file_position();
 
-        let arg_value_expr = self.parse_expression(0)?;
+        if is_named_arg {
+            self.consume_next(vec!["name"])?;
 
-        return Ok((true, Box::new(Expression {
+            let (newargname, newargpos) = match self.ctok.unwrap() {
+                Token::Name(pos, _, name) => (name.clone(), pos.clone()),
+                _ => unreachable!()
+            };
+
+            argname = newargname;
+            argpos = newargpos;
+
+            self.consume_next(vec!["="])?;
+        }
+
+        let argvalexpr = self.parse_expression(0)?;
+
+        return Ok((is_named_arg, Box::new(Expression {
             file_position: argpos.clone(),
-            kind: ExpressionKind::CallableArg(Identifier {
-                file_position: argpos.clone(),
-                identifier: argname.clone(),
-                type_params: Vec::new()
-            },
-            arg_value_expr)
+            kind: ExpressionKind::CallableArg(
+                Identifier {
+                    file_position: argpos.clone(),
+                    identifier: argname.clone(),
+                    type_params: Vec::new()
+                },
+                argvalexpr
+            )
         })));
     }
 

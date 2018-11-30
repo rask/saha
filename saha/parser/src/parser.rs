@@ -26,6 +26,9 @@ pub trait ParsesTokens {
     /// Consume any token.
     fn consume_any(&mut self) -> PR<()>;
 
+    /// Advance an internal token index counter.
+    fn advance_token_index(&mut self);
+
     /// Return a parse error for an unexpected token.
     fn unexpected(&mut self, token: &Token, expected: Vec<&str>) -> PR<()> {
         return Err(ParseError::new(
