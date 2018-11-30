@@ -142,13 +142,15 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Set a local reference value.
-    fn set_local_ref(&mut self, name: String, value: Value, refpos: &FilePosition) -> AstResult {
+    fn set_local_ref(&mut self, name: String, value: Value, refpos: &FilePosition, allow_create: bool) -> AstResult {
         let old = self.local_refs.get(&name);
 
-        if old.is_none() {
+        if old.is_none() && allow_create == false {
             let err = RuntimeError::new(&format!("Cannot access undefined variable `{}`", name), Some(refpos.clone()));
 
             return Err(err);
+        } else if old.is_none() && allow_create {
+            return self.create_local_ref(name, (value.kind.clone(), value.clone()), &refpos);
         }
 
         let (old_type, _) = old.unwrap();
@@ -193,6 +195,13 @@ impl<'a> AstVisitor<'a> {
         return Ok(value.clone());
     }
 
+    /// Remove a local named ref.
+    fn remove_local_ref(&mut self, name: String) -> AstResult {
+        self.local_refs.remove(&name);
+
+        return Ok(Value::void());
+    }
+
     /// Get an Arced Mutex to a single saha object instance.
     fn get_instance_lockable_ref(&mut self, instref: &InstRef, access_pos: FilePosition) -> Result<Arc<Mutex<Box<dyn SahaObject>>>, RuntimeError> {
         let st = crate::SAHA_SYMBOL_TABLE.lock().unwrap();
@@ -211,7 +220,7 @@ impl<'a> AstVisitor<'a> {
 
     /// Start visiting.
     pub fn start(&mut self) -> AstResult {
-        let (ast_res, _) = self.visit_block(&self.ast.entrypoint)?;
+        let (ast_res, _) = self.visit_block(&self.ast.entrypoint, HashMap::new())?;
 
         // FIXME validate return type
 
@@ -222,8 +231,14 @@ impl<'a> AstVisitor<'a> {
     ///
     /// Returns bailable result, meaning the block can be terminated midway in
     /// case a break or return statement is encountered.
-    fn visit_block(&mut self, block: &Box<Block>) -> BailableAstResult {
+    fn visit_block(&mut self, block: &Box<Block>, inject: HashMap<String, (Value, FilePosition)>) -> BailableAstResult {
         let mut idx = 0;
+
+        if inject.is_empty() == false {
+            for (n, v) in &inject {
+                self.set_local_ref(n.clone(), v.0.clone(), &v.1, true)?;
+            }
+        }
 
         'stmtloop: for s in &block.statements {
             idx += 1;
@@ -243,7 +258,19 @@ impl<'a> AstVisitor<'a> {
 
             if is_retmatch || block_bail {
                 // encountered a return statement, break out early
+                if inject.is_empty() == false {
+                    for (n, _) in inject {
+                        self.remove_local_ref(n)?;
+                    }
+                }
+
                 return Ok((block_value, true));
+            }
+        }
+
+        if inject.is_empty() == false {
+            for (n, _) in inject {
+                self.remove_local_ref(n)?;
             }
         }
 
@@ -355,7 +382,7 @@ impl<'a> AstVisitor<'a> {
 
             if else_block.is_some() {
                 let elseb = else_block.clone().unwrap();
-                let (_, bail_maybe) = self.visit_block(&elseb)?;
+                let (_, bail_maybe) = self.visit_block(&elseb, HashMap::new())?;
 
                 bail = bail_maybe;
             }
@@ -364,7 +391,7 @@ impl<'a> AstVisitor<'a> {
         }
 
         // we matched true for the if so we enter the block
-        let (_, bail) = self.visit_block(if_block)?;
+        let (_, bail) = self.visit_block(if_block, HashMap::new())?;
 
         return Ok((Value::void(), bail));
     }
@@ -398,7 +425,7 @@ impl<'a> AstVisitor<'a> {
         }
 
         // we matched true for the if so we enter the block
-        let (_, bail) = self.visit_block(block)?;
+        let (_, bail) = self.visit_block(block, HashMap::new())?;
 
         return Ok((true, Value::void(), bail));
     }
@@ -408,7 +435,7 @@ impl<'a> AstVisitor<'a> {
         let mut loop_val;
 
         'lloop: loop {
-            let (val, should_break) = self.visit_block(block)?;
+            let (val, should_break) = self.visit_block(block, HashMap::new())?;
 
             loop_val = val;
 
@@ -465,9 +492,55 @@ impl<'a> AstVisitor<'a> {
     fn visit_for_list_statement(&mut self, k_name: &Identifier, v_name: &Identifier, iterable: Value, for_block: &Box<Block>) -> BailableAstResult {
         let mut idx = 0;
 
-        self.set_local_ref(k_name.identifier.clone(), Value::int(idx), &k_name.file_position);
+        loop {
+            let next_val = self.call_method(&iterable, &AccessKind::Instance, &Identifier {
+                identifier: "next".to_string(),
+                file_position: FilePosition::unknown(),
+                type_params: Vec::new(),
+            }, HashMap::new())?;
 
-        unimplemented!()
+            let is_some = self.call_method(&next_val, &AccessKind::Instance, &Identifier {
+                identifier: "isSome".to_string(),
+                file_position: FilePosition::unknown(),
+                type_params: Vec::new(),
+            }, HashMap::new())?;
+
+            let is_some = match *is_some.kind {
+                SahaType::Bool => is_some.bool.unwrap(),
+                _ => false
+            };
+
+            if is_some == false {
+                break;
+            }
+
+            let next_val = self.call_method(&next_val, &AccessKind::Instance, &Identifier {
+                identifier: "unwrap".to_string(),
+                file_position: FilePosition::unknown(),
+                type_params: Vec::new(),
+            }, HashMap::new())?;
+
+            let mut inject = HashMap::new();
+
+            inject.insert(k_name.identifier.clone(), (Value::int(idx), k_name.file_position.clone()));
+            inject.insert(v_name.identifier.clone(), (next_val, v_name.file_position.clone()));
+
+            let (block_res, should_bail) = self.visit_block(for_block, inject)?;
+
+            if should_bail {
+                return Ok((block_res, true));
+            }
+
+            idx += 1;
+        }
+
+        self.call_method(&iterable, &AccessKind::Instance, &Identifier {
+            identifier: "reset".to_string(),
+            file_position: FilePosition::unknown(),
+            type_params: Vec::new(),
+        }, HashMap::new())?;
+
+        return Ok((Value::void(), false));
     }
 
     /// Visit a for loop over a dict.
@@ -501,7 +574,7 @@ impl<'a> AstVisitor<'a> {
 
         if owner_inst.is_none() {
             // local ref assign
-            return self.set_local_ref(property.identifier, value, &property.file_position);
+            return self.set_local_ref(property.identifier, value, &property.file_position, false);
         } else {
             // property assign
             let obj = owner_inst.unwrap();
@@ -1099,6 +1172,7 @@ impl<'a> AstVisitor<'a> {
         } else if owner_class_name.is_some() && acckind == Some(AccessKind::Static) {
             return self.call_static_method_with_classname(&owner_class_name.unwrap(), &AccessKind::Static, &callable, args);
         } else {
+            let args = self.parse_callable_args(args)?;
             return self.call_method(&owner_inst.unwrap(), &acckind.unwrap_or(AccessKind::Instance), &callable, args);
         }
     }
@@ -1162,7 +1236,8 @@ impl<'a> AstVisitor<'a> {
         match &rhs_expr.kind {
             ExpressionKind::FunctionCall(identpath, call_args) => {
                 let (_, _, _, ident) = self.resolve_ident_path(&identpath)?;
-                self.call_method(&lhs_value, &access_kind, &ident, &call_args)
+                let args = self.parse_callable_args(call_args)?;
+                self.call_method(&lhs_value, &access_kind, &ident, args)
             },
             ExpressionKind::IdentPath(..) => {
                 let (_, _, _, ident) = self.resolve_ident_path(rhs_expr)?;
@@ -1257,7 +1332,7 @@ impl<'a> AstVisitor<'a> {
     }
 
     /// Call an object method.
-    fn call_method(&mut self, obj: &Value, access_kind: &AccessKind, callable: &Identifier, args: &Box<Expression>) -> AstResult {
+    fn call_method(&mut self, obj: &Value, access_kind: &AccessKind, callable: &Identifier, call_args: SahaFunctionArguments) -> AstResult {
         match *obj.kind {
             SahaType::Void => {
                 let err = RuntimeError::new("Cannot access property or call method on a void value", Some(callable.file_position.clone()));
@@ -1265,8 +1340,6 @@ impl<'a> AstVisitor<'a> {
                 return Err(err);
             },
             SahaType::Obj => {
-                let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
-
                 let is_static_call = match access_kind {
                     AccessKind::Instance => false,
                     _ => true
@@ -1311,8 +1384,6 @@ impl<'a> AstVisitor<'a> {
                 self.call_instance_member(Some(instref),  method_ref, access, call_args, inst_tparams, fqname)
             },
             _ => {
-                let call_args: SahaFunctionArguments = self.parse_callable_args(args)?;
-
                 obj.call_value_method(&callable.file_position, access_kind, &callable.identifier, &call_args)
             }
         }

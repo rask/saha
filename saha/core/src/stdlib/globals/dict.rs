@@ -122,6 +122,8 @@ impl SahaObject for SahaDict {
             "insert" => self.insert(args, access),
             "remove" => self.remove(args, access),
             "get" => self.get(args, access),
+            "next" => unimplemented!(),
+            "reset" => unimplemented!(),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),

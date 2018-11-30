@@ -84,6 +84,10 @@ function main() int
         print_line(k->toString() + ": " + v);
     }
 
+    for (k, v in {"foo": "bar", "qwe": "rty"}) {
+        print_line(k + ": " + v);
+    }
+
     var counter'int = 0;
 
     loop {
