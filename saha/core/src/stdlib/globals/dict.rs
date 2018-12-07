@@ -4,31 +4,19 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex}
+    sync::Arc
 };
 
-use saha_lib::{
-    symbol_table::InstRef,
-    errors::{Error, RuntimeError},
-    source::files::FilePosition,
-    types::{
-        Value, SahaType,
-        objects::{ClassDefinition, AccessParams, Property, ObjProperties, SahaObject},
-        functions::{SahaCallable, SahaCallResult, SahaFunctionArguments, ValidatesArgs, SahaFunctionParamDefs, FunctionParameter}
-    }
-};
+use saha_lib::prelude::*;
 
-use crate::stdlib::globals::{
-    result::SahaResult,
-    option::SahaOption
-};
+use crate::stdlib::globals::option::SahaOption;
 
 /// Create a new Dict instance.
 pub fn new_instance(
     instref: InstRef,
-    args: SahaFunctionArguments,
-    type_params: &Vec<Box<SahaType>>,
-    additional_data: SahaFunctionArguments,
+    args: &SahaFunctionArguments,
+    type_params: &[Box<SahaType>],
+    additional_data: &SahaFunctionArguments,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 1 {
@@ -37,23 +25,21 @@ pub fn new_instance(
         return Err(err);
     }
 
-    if args.len() > 0 {
+    if !args.is_empty() {
         let err = RuntimeError::new("`Dict` expects no arguments", create_pos);
 
         return Err(err);
     }
 
-    let initial_data: HashMap<String, Value>;
-
-    if additional_data.is_empty() {
-        initial_data = HashMap::new();
+    let initial_data = if additional_data.is_empty() {
+        HashMap::new()
     } else {
-        initial_data = additional_data;
-    }
+        additional_data.clone()
+    };
 
     let dict_inst = Box::new(SahaDict {
         param_type: type_params[0].clone(),
-        data: initial_data,
+        data: initial_data.clone(),
         instref: instref
     });
 
@@ -70,7 +56,7 @@ struct SahaDict {
 
 impl SahaObject for SahaDict {
     fn get_instance_ref(&self) -> InstRef {
-        return self.instref.clone();
+        return self.instref;
     }
 
     fn is_core_defined(&self) -> bool {
@@ -89,11 +75,11 @@ impl SahaObject for SahaDict {
         return vec![];
     }
 
-    fn get_full_method_name(&mut self, method_name: &str) -> String {
+    fn get_full_method_name(&mut self, _method_name: &str) -> String {
         unimplemented!()
     }
 
-    fn get_method_ref(&mut self, method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError> {
+    fn get_method_ref(&mut self, _method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError> {
         unimplemented!()
     }
 
@@ -116,12 +102,10 @@ impl SahaObject for SahaDict {
             ));
         }
 
-        let list_type = self.get_type_params()[0].1.clone();
-
         match access.member_name as &str {
-            "insert" => self.insert(args, access),
-            "remove" => self.remove(args, access),
-            "get" => self.get(args, access),
+            "insert" => self.insert(&args, access),
+            "remove" => self.remove(&args, access),
+            "get" => self.get(&args, access),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -131,11 +115,11 @@ impl SahaObject for SahaDict {
         }
     }
 
-    fn access_property(&self, access: AccessParams) -> SahaCallResult {
+    fn access_property(&self, _access: AccessParams) -> SahaCallResult {
         unimplemented!()
     }
 
-    fn mutate_property(&mut self, access: AccessParams, new_value: Value) -> SahaCallResult {
+    fn mutate_property(&mut self, _access: AccessParams, _new_value: Value) -> SahaCallResult {
         unimplemented!()
     }
 
@@ -173,7 +157,7 @@ impl SahaDict {
     }
 
     /// Insert a new value for a certain key.
-    pub fn insert(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+    pub fn insert(&mut self, args: &SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
         self.insert_params().validate_args(&args, access.access_file_pos)?;
 
         let key_str = args.get("key").unwrap().clone().str.unwrap();
@@ -197,10 +181,10 @@ impl SahaDict {
     }
 
     /// Remove an item from the dict.
-    pub fn remove(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+    pub fn remove(&mut self, args: &SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
         self.remove_params().validate_args(&args, access.access_file_pos)?;
 
-        let key_str = args.get("key").unwrap().clone().str.unwrap();
+        let key_str = args["key"].clone().str.unwrap();
 
         self.data.remove(&key_str);
 
@@ -221,21 +205,21 @@ impl SahaDict {
     }
 
     /// Get an item from the dict. Returns SahaOption.
-    pub fn get(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+    pub fn get(&mut self, args: &SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
         self.get_params().validate_args(&args, access.access_file_pos)?;
 
-        let key_str = args.get("key").unwrap().clone().str.unwrap();
+        let key_str = args["key"].clone().str.unwrap();
 
         let opt_obj: Box<dyn SahaObject>;
         let opt_instref = crate::utils::get_new_instref();
 
-        if self.data.contains_key(&key_str) == false {
+        if !self.data.contains_key(&key_str) {
             opt_obj = SahaOption::new_none(
                 opt_instref,
                 self.param_type.clone()
             );
         } else {
-            let val = self.data.get(&key_str).unwrap();
+            let val = self.data[&key_str].clone();
 
             opt_obj = SahaOption::new_some(
                 opt_instref,

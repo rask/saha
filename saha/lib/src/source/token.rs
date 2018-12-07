@@ -429,7 +429,7 @@ impl ContainsImports for Vec<Token> {
                         _ => return (None, None, None)
                     };
                 },
-                _ => return (None, None, None)
+                _ => continue
             };
         }
 

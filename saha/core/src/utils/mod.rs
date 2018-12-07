@@ -5,23 +5,7 @@ use std::{
     collections::HashMap
 };
 
-use saha_lib::{
-    errors::RuntimeError,
-    symbol_table::InstRef,
-    types::{
-        Value, SahaType,
-        functions::{
-            SahaFunctionParamDefs,
-            SahaFunctionArguments,
-            FunctionParameter,
-            SahaCallResult,
-            CoreFunction
-        },
-        objects::{
-            SahaObject
-        }
-    }
-};
+use saha_lib::prelude::*;
 
 /// Get a new InstRef to be used on a new instance.
 pub fn get_new_instref() -> InstRef {

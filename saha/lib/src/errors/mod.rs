@@ -8,9 +8,7 @@
 
 use std::fmt::Debug;
 
-use crate::{
-    source::files::FilePosition
-};
+use crate::source::files::FilePosition;
 
 /// Error trait
 ///

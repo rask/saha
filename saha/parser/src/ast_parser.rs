@@ -3,28 +3,16 @@
 //! Parses AST from function/method bodies.
 
 use std::{
-    collections::HashMap,
     iter::{Iterator, Peekable},
     slice::Iter,
     mem::discriminant,
 };
 
+use saha_lib::prelude::*;
+
 use saha_lib::{
     ast::*,
-    errors::{
-        Error,
-        ParseError
-    },
-    source::{
-        files::FilePosition,
-        token::Token
-    },
-    types::{
-        SahaType,
-        Value,
-        objects::{MemberVisibility},
-        functions::{FunctionParameter, SahaFunctionParamDefs}
-    }
+    source::token::Token
 };
 
 use crate::{
@@ -41,7 +29,7 @@ pub struct AstParser<'a> {
     ptok: Option<&'a Token>,
     ntok: Option<&'a Token>,
     tokidx: usize,
-    shadow: &'a Vec<Token>,
+    shadow: &'a [Token],
     tokens: Peekable<Iter<'a, Token>>
 }
 
@@ -51,7 +39,7 @@ impl<'a> ParsesTokens for AstParser<'a> {
             self.get_dummy_token_type(a)
         }).collect();
 
-        self.ptok = self.ctok.clone();
+        self.ptok = self.ctok;
         self.ctok = self.tokens.next();
 
         if self.ctok.is_none() {
@@ -77,7 +65,7 @@ impl<'a> ParsesTokens for AstParser<'a> {
         if next.is_none() {
             self.ntok = None;
         } else {
-            self.ntok = Some(next.unwrap().clone());
+            self.ntok = next.cloned();
         }
 
         self.advance_token_index();
@@ -86,7 +74,7 @@ impl<'a> ParsesTokens for AstParser<'a> {
     }
 
     fn consume_any(&mut self) -> PR<()> {
-        self.ptok = self.ctok.clone();
+        self.ptok = self.ctok;
         self.ctok = self.tokens.next();
 
         if self.ctok.is_none() {
@@ -105,7 +93,7 @@ impl<'a> ParsesTokens for AstParser<'a> {
         if next.is_none() {
             self.ntok = None;
         } else {
-            self.ntok = Some(next.unwrap().clone());
+            self.ntok = next.cloned();
         }
 
         self.advance_token_index();
@@ -119,7 +107,7 @@ impl<'a> ParsesTokens for AstParser<'a> {
 }
 
 impl<'a> AstParser<'a> {
-    pub fn new(tokens: &'a Vec<Token>) -> AstParser<'a> {
+    pub fn new(tokens: &'a [Token]) -> AstParser<'a> {
         return AstParser {
             ctok: None,
             ptok: None,
@@ -157,23 +145,21 @@ impl<'a> AstParser<'a> {
     /// statements the block contains, the other contains the block expression
     /// itself.
     fn parse_block(&mut self, is_root: bool) -> PR<(Vec<&str>, Box<Block>)> {
-        let block_open_pos: FilePosition;
-
-        if is_root == false {
+        let block_open_pos: FilePosition = if !is_root {
             // at root we have no curly bounds
             self.consume_next(vec!["{"])?;
 
-            block_open_pos = match self.ctok.unwrap() {
+            match self.ctok.unwrap() {
                 Token::CurlyOpen(f) => f.to_owned(),
                 _ => unreachable!()
-            };
+            }
         } else {
-            block_open_pos = self.ntok.unwrap_or(&Token::Eob).get_file_position();
-        }
+            self.ntok.unwrap_or(&Token::Eob).get_file_position()
+        };
 
         let statements = self.parse_statements()?;
 
-        if is_root == false {
+        if !is_root {
             // at root we have no curly bounds
             self.consume_next(vec!["}"])?;
         }
@@ -399,39 +385,31 @@ impl<'a> AstParser<'a> {
         let mut elifs: Vec<Box<Statement>> = Vec::new();
         let mut elseblock: Option<Box<Block>> = None;
 
-        loop {
-            match self.ntok.unwrap() {
-                Token::KwElseif(..) => {
-                    self.consume_next(vec!["elseif"])?;
+        while let Token::KwElseif(..) = self.ntok.unwrap() {
+            self.consume_next(vec!["elseif"])?;
 
-                    let elif_pos = self.ctok.unwrap().get_file_position();
+            let elif_pos = self.ctok.unwrap().get_file_position();
 
-                    self.consume_next(vec!["("])?;
+            self.consume_next(vec!["("])?;
 
-                    let elif_cond = self.parse_expression(0)?;
+            let elif_cond = self.parse_expression(0)?;
 
-                    self.consume_next(vec![")"])?;
+            self.consume_next(vec![")"])?;
 
-                    let (_, elif_block) = self.parse_block(false)?;
+            let (_, elif_block) = self.parse_block(false)?;
 
-                    elifs.push(Box::new(Statement {
-                        kind: StatementKind::If(elif_cond, elif_block, Vec::new(), None),
-                        file_position: elif_pos
-                    }));
-                },
-                _ => break
-            };
-        }
-
-        match self.ntok.unwrap() {
-            Token::KwElse(..) => {
-                self.consume_next(vec!["else"])?;
-
-                let (_, e) = self.parse_block(false)?;
-                elseblock = Some(e);
-            }
-            _ => ()
+            elifs.push(Box::new(Statement {
+                kind: StatementKind::If(elif_cond, elif_block, Vec::new(), None),
+                file_position: elif_pos
+            }));
         };
+
+        if let Token::KwElse(..) = self.ntok.unwrap() {
+            self.consume_next(vec!["else"])?;
+
+            let (_, e) = self.parse_block(false)?;
+            elseblock = Some(e);
+        }
 
         let if_statement = Statement {
             kind: StatementKind::If(if_cond, if_block, elifs, elseblock),
@@ -523,7 +501,7 @@ impl<'a> AstParser<'a> {
             return Ok(expression);
         }
 
-        return self.parse_binop_expression(expression, minimum_op_precedence);
+        return self.parse_binop_expression(expression);
     }
 
     /// Primaries are building blocks for expressions. We could parse these in the
@@ -664,7 +642,7 @@ impl<'a> AstParser<'a> {
 
     /// Parse a binary operation. First we parse the op and then the RHS
     /// expression. Then we check if we should parse another binop.
-    fn parse_binop_expression(&mut self, lhs_expr: Box<Expression>, minimum_op_precedence: i8) -> PR<Box<Expression>> {
+    fn parse_binop_expression(&mut self, lhs_expr: Box<Expression>) -> PR<Box<Expression>> {
         self.consume_next(vec!["+", "-", "*", "/", "&&", "||", "==", ">", "<", ">=", "<="])?;
 
         let op_token = self.ctok.unwrap();
@@ -685,13 +663,11 @@ impl<'a> AstParser<'a> {
         let mut ntok: &Token = self.ntok.unwrap_or(&Token::Eob);
         let mut next_precedence = ntok.get_precedence();
 
-        while
-            (next_precedence > op_token.get_precedence() && binop.is_left_assoc == true) ||
-            (next_precedence == op_token.get_precedence() && binop.is_left_assoc == false)
+        while next_precedence >= op_token.get_precedence() && binop.is_left_assoc
         {
             // while we are on route in binops we dig down on the right side to
             // make precedence work
-            rhs_expression = self.parse_binop_expression(rhs_expression, next_precedence)?;
+            rhs_expression = self.parse_binop_expression(rhs_expression)?;
 
             ntok = self.ntok.unwrap_or(&Token::Eob);
             next_precedence = ntok.get_precedence();
@@ -707,7 +683,7 @@ impl<'a> AstParser<'a> {
             return Ok(binop_expr);
         }
 
-        return self.parse_binop_expression(binop_expr, 0);
+        return self.parse_binop_expression(binop_expr);
     }
 
     /// Parse an unary operation.
@@ -804,7 +780,7 @@ impl<'a> AstParser<'a> {
                     Identifier {
                         file_position: pos.clone(),
                         identifier: alias.to_string(),
-                        type_params: Vec::new()
+                        type_params: typeparams
                     }
                 },
                 _ => unreachable!()
@@ -866,7 +842,7 @@ impl<'a> AstParser<'a> {
 
                     args.push(arg_expr);
 
-                    if allow_unnamed_single_param && is_named_arg == false {
+                    if allow_unnamed_single_param && !is_named_arg {
                         break
                     } else {
                         continue
@@ -974,7 +950,7 @@ impl<'a> AstParser<'a> {
     }
 
     /// Validate a parameter type name (should be a single uppercase char).
-    fn validate_paramtype_name(&self, name: &String) -> bool {
+    fn validate_paramtype_name(&self, name: &str) -> bool {
         if name.len() != 1 {
             return false;
         }
@@ -992,8 +968,6 @@ impl<'a> AstParser<'a> {
         let mut tparams: Vec<Box<SahaType>> = Vec::new();
 
         self.consume_next(vec!["<"])?;
-
-        let tparams_pos = self.ctok.unwrap().get_file_position();
 
         loop {
             let ty = self.parse_type_declaration(false)?;
@@ -1133,71 +1107,19 @@ mod tests {
 
         let stmt = statements.pop().unwrap();
 
-        // this will get messy
-        let expected_expr = Box::new(Expression {
-            file_position: testfilepos(),
-            kind: ExpressionKind::BinaryOperation(
-                Box::new(Expression {
-                    file_position: testfilepos(),
-                    kind: ExpressionKind::BinaryOperation(
-                        Box::new(Expression {
-                            file_position: testfilepos(),
-                            kind: ExpressionKind::LiteralValue(Value::int(1))
-                        }),
-                        BinOp {
-                            kind: BinOpKind::Add,
-                            is_left_assoc: true,
-                            file_position: testfilepos()
-                        },
-                        Box::new(Expression {
-                            file_position: testfilepos(),
-                            kind: ExpressionKind::LiteralValue(Value::int(1))
-                        }),
-                    )
-                }),
-                BinOp {
-                    kind: BinOpKind::Add,
-                    is_left_assoc: true,
-                    file_position: testfilepos()
-                },
-                Box::new(Expression {
-                    file_position: testfilepos(),
-                    kind: ExpressionKind::BinaryOperation(
-                        Box::new(Expression {
-                            file_position: testfilepos(),
-                            kind: ExpressionKind::BinaryOperation(
-                                Box::new(Expression {
-                                    file_position: testfilepos(),
-                                    kind: ExpressionKind::LiteralValue(Value::int(2))
-                                }),
-                                BinOp {
-                                    kind: BinOpKind::Mul,
-                                    is_left_assoc: true,
-                                    file_position: testfilepos()
-                                },
-                                Box::new(Expression {
-                                    file_position: testfilepos(),
-                                    kind: ExpressionKind::LiteralValue(Value::int(3))
-                                })
-                            )
-                        }),
-                        BinOp {
-                            file_position: testfilepos(),
-                            is_left_assoc: true,
-                            kind: BinOpKind::Sub
-                        },
-                        Box::new(Expression {
-                            file_position: testfilepos(),
-                            kind: ExpressionKind::LiteralValue(Value::int(1))
-                        })
-                    )
-                })
-            )
-        });
+        // hacky, but seems to work, just can't be arsed to write out the actual structure in Rust
+        // this will break if a dependency's debug format is changed for instance
+        let expected_output = String::from("Expression { file_position: /unknown:0:0, kind: BinaryOperation(Expression \
+        { file_position: /unknown:0:0, kind: LiteralValue(Value::Int(1)) }, BinOp::Add, Expression { file_position: \
+        /unknown:0:0, kind: BinaryOperation(Expression { file_position: /unknown:0:0, kind: LiteralValue(Value::Int(1)) \
+        }, BinOp::Add, Expression { file_position: /unknown:0:0, kind: BinaryOperation(Expression { file_position: \
+        /unknown:0:0, kind: BinaryOperation(Expression { file_position: /unknown:0:0, kind: LiteralValue(Value::Int(2)) \
+        }, BinOp::Mul, Expression { file_position: /unknown:0:0, kind: LiteralValue(Value::Int(3)) }) }, BinOp::Sub, \
+        Expression { file_position: /unknown:0:0, kind: LiteralValue(Value::Int(1)) }) }) }) }");
 
         match stmt.kind {
             StatementKind::Expression(expr) => {
-                assert_eq!(expected_expr, expr);
+                assert_eq!(expected_output, format!("{:?}", expr));
             },
             _ => panic!("Unexpected statement kind, expected an expression statement")
         };

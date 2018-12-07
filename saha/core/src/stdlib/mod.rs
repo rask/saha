@@ -5,10 +5,7 @@
 
 mod globals;
 
-use saha_lib::types::{
-    SahaType, Value,
-    functions::{FunctionParameter, CoreFunction}
-};
+use saha_lib::types::functions::CoreFunction;
 
 pub fn register_stdlib() {
     let mut funcs: Vec<(String, CoreFunction)> = Vec::new();

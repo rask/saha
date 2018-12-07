@@ -121,7 +121,7 @@ pub struct UserFunction {
 }
 
 impl SahaCallable for CoreFunction {
-    fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
+    fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, _type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
         let validated_args = self.params.validate_args(&args, &call_source_position)?;
 
         let ret_type = match &return_type {
@@ -230,7 +230,7 @@ impl SahaCallable for CoreFunction {
 }
 
 impl SahaCallable for UserFunction {
-    fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
+    fn call(&self, args: SahaFunctionArguments, return_type: Option<Box<SahaType>>, _type_params: Vec<(char, SahaType)>, call_source_position: Option<FilePosition>) -> SahaCallResult {
         let validated_args = self.params.validate_args(&args, &call_source_position)?;
 
         let ret_type = match &return_type {

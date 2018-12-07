@@ -11,6 +11,8 @@
 //!
 //! After parsing is done we have a ready to interpret application.
 
+#![allow(clippy::needless_return, clippy::redundant_field_names)]
+
 extern crate saha_lib;
 extern crate noisy_float;
 
@@ -24,20 +26,20 @@ use std::collections::HashMap;
 use saha_lib::{
     SAHA_SYMBOL_TABLE,
     types::{
-        Value, SahaType,
         functions::{SahaCallable, UserFunction},
-        objects::{MemberVisibility, ClassDefinition, Property, ObjProperties}
+        objects::{MemberVisibility, BehaviorDefinition, ClassDefinition, Property, ObjProperties}
     },
     errors::{Error, ParseError},
     source::token::Token,
 };
 
 use crate::{
-    parse_table::{ParseTable, PropertyDefinition, BehaviorDefinition, ClassDefinition as PTClassDefinition},
+    parse_table::{ParseTable, BehaviorDefinition as PTBehaviorDefinition, ClassDefinition as PTClassDefinition},
     ast_parser::AstParser,
     root_parser::RootParser
 };
 
+/// Populate parsed constants to the global symbol table.
 fn populate_constants(parse_table: &ParseTable) -> Result<(), ParseError> {
     let constants = parse_table.constants.to_owned();
 
@@ -48,12 +50,13 @@ fn populate_constants(parse_table: &ParseTable) -> Result<(), ParseError> {
     return Ok(());
 }
 
+/// Populate functions to the global symbol table.
 fn populate_functions(parse_table: &ParseTable) -> Result<(), ParseError> {
     let funcs = parse_table.functions.to_owned();
 
     let mut st = SAHA_SYMBOL_TABLE.lock().unwrap();
 
-    for (fname, func) in funcs {
+    for (_, func) in funcs {
         let mut parser = AstParser::new(&func.body_tokens);
 
         let ast = parser.start_parse()?;
@@ -74,14 +77,38 @@ fn populate_functions(parse_table: &ParseTable) -> Result<(), ParseError> {
     return Ok(());
 }
 
+/// Populate the global symbol table with parsed behaviors.
 fn populate_behaviors(parse_table: &ParseTable) -> Result<(), ParseError> {
+    let mut st = SAHA_SYMBOL_TABLE.lock().unwrap();
+
+    for (behname, parsed_behavior) in &parse_table.behaviors {
+        let mut behavior_methods: HashMap<String, (_, _)> = HashMap::new();
+        let behavior_name = parsed_behavior.name.clone();
+        let behavior_plain_name = parsed_behavior.source_name.clone();
+
+        for (mname, m) in &parsed_behavior.methods {
+            let behmethod = (m.parameters.clone(), m.return_type.clone());
+
+            behavior_methods.insert(mname.to_string(), behmethod);
+        }
+
+        let behavior_def: BehaviorDefinition = BehaviorDefinition {
+            name: behavior_plain_name,
+            fqname: behavior_name,
+            methods: behavior_methods
+        };
+
+        st.behaviors.insert(behname.to_string(), behavior_def);
+    }
+
     return Ok(());
 }
 
+/// Generate a collection of class property definitions for a class definition.
 fn generate_class_properties(c: &PTClassDefinition) -> ObjProperties {
     let mut props: ObjProperties = HashMap::new();
 
-    for (_, pdef) in &c.properties {
+    for pdef in c.properties.values() {
         props.insert(pdef.name.clone(), Property {
             name: pdef.name.clone(),
             prop_type: pdef.property_type.clone(),
@@ -95,10 +122,11 @@ fn generate_class_properties(c: &PTClassDefinition) -> ObjProperties {
     return props;
 }
 
+/// Generate methods for a class definition.
 fn generate_class_methods(c: &PTClassDefinition) -> Result<HashMap<String, Box<dyn SahaCallable>>, ParseError> {
     let mut methods: HashMap<String, Box<dyn SahaCallable>> = HashMap::new();
 
-    for (_, fndef) in &c.methods {
+    for fndef in c.methods.values() {
         let mut parser = AstParser::new(&fndef.body_tokens);
 
         let ast = parser.start_parse()?;
@@ -119,11 +147,12 @@ fn generate_class_methods(c: &PTClassDefinition) -> Result<HashMap<String, Box<d
     return Ok(methods);
 }
 
-fn validate_class_implements(c: &PTClassDefinition, beh_defs: &HashMap<String, BehaviorDefinition>) -> Result<(), ParseError> {
+/// Check that classes implement their deifned behaviors correctly.
+fn validate_class_implements(c: &PTClassDefinition, beh_defs: &HashMap<String, PTBehaviorDefinition>) -> Result<(), ParseError> {
     let c_impl = &c.implements;
 
     for i in c_impl {
-        if beh_defs.contains_key(i) == false {
+        if !beh_defs.contains_key(i) {
             let err = ParseError::new(
                 &format!("Invalid behavior implementation on `{}`, no behavior `{}` defined", c.name, i),
                 Some(c.source_position.clone())
@@ -135,7 +164,7 @@ fn validate_class_implements(c: &PTClassDefinition, beh_defs: &HashMap<String, B
         let cbeh = beh_defs.get(i).unwrap();
 
         for (mname, method) in &cbeh.methods {
-            if c.methods.contains_key(mname) == false {
+            if !c.methods.contains_key(mname) {
                 let err = ParseError::new(
                     &format!("Invalid behavior implementation on `{}`, method `{}` defined in behavior `{}` not found in class", c.name, mname, cbeh.name),
                     Some(c.source_position.clone())
@@ -144,7 +173,7 @@ fn validate_class_implements(c: &PTClassDefinition, beh_defs: &HashMap<String, B
                 return Err(err);
             }
 
-            let cmeth = c.methods.get(mname).unwrap();
+            let cmeth = &c.methods[mname];
 
             if cmeth != method {
                 let err = ParseError::new(
@@ -160,6 +189,7 @@ fn validate_class_implements(c: &PTClassDefinition, beh_defs: &HashMap<String, B
     return Ok(());
 }
 
+/// Populate parsed class definitions to the global symbol table.
 fn populate_classes(parse_table: &ParseTable) -> Result<(), ParseError> {
     let classes = parse_table.classes.clone();
     let behaviors = &parse_table.behaviors;
@@ -182,7 +212,7 @@ fn populate_classes(parse_table: &ParseTable) -> Result<(), ParseError> {
 
         st.classes.insert(cname.clone(), cdef);
 
-        for (_, m) in &methods {
+        for m in methods.values() {
             st.add_method(&cname, &m);
         }
     }
@@ -202,11 +232,11 @@ fn populate_global_symbol_table(parse_table: &ParseTable) -> Result<(), ParseErr
 }
 
 /// Parse a collection of tokens into a declaration table and ASTs.
-pub fn parse_tokens(tokens: &Vec<Token>) -> Result<(), ParseError> {
+pub fn parse_tokens(tokens: &[Token]) -> Result<(), ParseError> {
     let mut parse_table = ParseTable::new();
 
     {
-        let mut root_parser = RootParser::new(&tokens, &mut parse_table);
+        let mut root_parser = RootParser::new(tokens, &mut parse_table);
 
         root_parser.start_parse()?;
     }

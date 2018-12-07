@@ -17,26 +17,21 @@ use std::{
     }
 };
 
+use crate::prelude::*;
+
 use crate::{
     ast::AccessKind,
-    symbol_table::InstRef,
-    errors::{Error, RuntimeError},
-    source::files::FilePosition,
-    types::{
-        functions::{
-            ValidatesArgs,
-            SahaCallResult,
-            SahaFunctionParamDefs,
-            SahaFunctionArguments
-        },
-        value_methods::ValueMethodFn
-    }
+    types::value_methods::ValueMethodFn
 };
 
 lazy_static! {
     pub static ref str_methods: HashMap<String, (SahaFunctionParamDefs, ValueMethodFn)> = value_methods::get_str_methods();
     pub static ref int_methods: HashMap<String, (SahaFunctionParamDefs, ValueMethodFn)> = value_methods::get_int_methods();
+    pub static ref float_methods: HashMap<String, (SahaFunctionParamDefs, ValueMethodFn)> = value_methods::get_float_methods();
 }
+
+/// UUID as bytes
+pub type InstRef = [u8; 16];
 
 /// Saha types.
 #[derive(Clone, Debug, PartialEq)]
@@ -256,10 +251,18 @@ impl Value {
         return Value::new();
     }
 
+    /// Internal. Call a value method, meaning our "raw" strings can be used
+    /// like objects in userland code.
+    ///
+    /// ```saha
+    /// var foo'str = "hello world";
+    /// vat len'int = foo->length();
+    /// ```
     pub fn call_value_method(&self, call_pos: &FilePosition, _: &AccessKind, method_name: &String, args: &SahaFunctionArguments) -> SahaCallResult {
         let valuemethods = match *self.kind {
             SahaType::Int => int_methods.clone(),
             SahaType::Str => str_methods.clone(),
+            SahaType::Float => float_methods.clone(),
             _ => unimplemented!()
         };
 

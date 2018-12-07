@@ -5,18 +5,8 @@
 
 use std::collections::HashMap;
 
-use saha_lib::{
-    source::{
-        files::FilePosition,
-        token::Token,
-    },
-    types::{
-        Value,
-        SahaType,
-        objects::MemberVisibility,
-        functions::SahaFunctionParamDefs
-    }
-};
+use saha_lib::prelude::*;
+use saha_lib::source::token::Token;
 
 /// Function defintion, from which a callable can be built from.
 #[derive(Clone, Debug)]
@@ -55,7 +45,7 @@ pub struct ClassDefinition {
     pub type_params: Vec<(char, Box<SahaType>)>
 }
 
-/// Behavior definitions, used to build actual behaviors.
+/// Behavior definitions.
 #[derive(Clone)]
 pub struct BehaviorDefinition {
     pub name: String,

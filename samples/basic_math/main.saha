@@ -10,9 +10,22 @@ function main() int
 
     first = 1 + 2 + 3;
     fstr = first->toString();
+
     to_print = "should be 6: 1 + 2 + 3 = " + fstr;
 
     print_line(text = to_print);
+
+    first = 2 + 2 / 2 + (3 + 5) * 3;
+    fstr = first->toString();
+
+    to_print = "should be 27: 2 + 2 / 2 + (3 + 5) * 3 = " + fstr;
+
+    print_line(text = to_print);
+
+    var asfloat'float = first->toFloat() / 2.0;
+    var flstr'str = asfloat->toString();
+
+    print_line("27 / 2 = " + flstr);
 
     return 0;
 }

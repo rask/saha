@@ -125,7 +125,7 @@ impl<'a> Lexer<'a> {
         for current_character in self.source_string.chars() {
             current_column += 1;
 
-            if comment_maybe_starts == true {
+            if comment_maybe_starts {
                 if current_character == '/' {
                     comment_is_open = true;
                     comment_maybe_starts = false;
@@ -138,7 +138,7 @@ impl<'a> Lexer<'a> {
                 }
             }
 
-            if comment_is_open == true {
+            if comment_is_open {
                 if current_character == '\n' {
                     comment_is_open = false;
 
@@ -173,13 +173,11 @@ impl<'a> Lexer<'a> {
                 continue;
             }
 
-            if comment_can_start == true {
-                if current_character == '/' {
-                    comment_maybe_starts = true;
-                }
+            if comment_can_start && current_character == '/' {
+                comment_maybe_starts = true;
             }
 
-            if string_is_open == true {
+            if string_is_open {
                 comment_can_start = false;
                 comment_maybe_starts = false;
                 let last_string_char: char;
@@ -233,24 +231,20 @@ impl<'a> Lexer<'a> {
                 current_character_type = "newline";
             } else if current_character.is_ascii_whitespace() {
                 current_character_type = "whitespace";
-            } else if current_character.is_ascii() == true
-                && current_character.is_ascii_alphanumeric() == false
-            {
+            } else if current_character.is_ascii() && !current_character.is_ascii_alphanumeric() {
                 // symbols
                 current_character_type = "symbol";
+            } else if current_character.is_numeric() {
+                // numbers
+                current_character_type = "number";
             } else {
-                if current_character.is_numeric() {
-                    // numbers
-                    current_character_type = "number";
-                } else {
-                    // everything else
-                    current_character_type = "word";
-                }
+                // everything else
+                current_character_type = "word";
             }
 
             match current_character_type {
                 "comment" | "string" => {
-                    if char_buffer.is_empty() == false {
+                    if !char_buffer.is_empty() {
                         lexemes.push(Lexeme::Word(
                             self.new_filepos(current_line, char_buffer.len() as i32),
                             char_buffer.iter().collect()
@@ -259,7 +253,7 @@ impl<'a> Lexer<'a> {
                         char_buffer.clear();
                     }
 
-                    if number_buffer.is_empty() == false {
+                    if !number_buffer.is_empty() {
                         lexemes.push(Lexeme::Number(
                             self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
@@ -269,7 +263,7 @@ impl<'a> Lexer<'a> {
                     }
                 },
                 "word" => {
-                    if number_buffer.is_empty() == false {
+                    if !number_buffer.is_empty() {
                         lexemes.push(Lexeme::Number(
                             self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
@@ -281,7 +275,7 @@ impl<'a> Lexer<'a> {
                     char_buffer.push(current_character);
                 },
                 "number" => {
-                    if char_buffer.is_empty() == false {
+                    if !char_buffer.is_empty() {
                         // we allow numbers inside names
                         char_buffer.push(current_character);
                     } else {
@@ -296,10 +290,10 @@ impl<'a> Lexer<'a> {
                     }
                 },
                 "symbol" => {
-                    if current_character == '.' && number_buffer.is_empty() == false {
+                    if current_character == '.' && !number_buffer.is_empty() {
                         number_buffer.push(current_character);
                     } else {
-                        if number_buffer.is_empty() == false {
+                        if !number_buffer.is_empty() {
                             lexemes.push(Lexeme::Number(
                                 self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                                 number_buffer.iter().collect()
@@ -311,7 +305,7 @@ impl<'a> Lexer<'a> {
                         if word_joiners.contains(&current_character) {
                             char_buffer.push(current_character);
                         } else {
-                            if char_buffer.is_empty() == false {
+                            if !char_buffer.is_empty() {
                                 // Word buffer contains something and we encountered non-joiner, flush
                                 // the word buffer.
                                 lexemes.push(Lexeme::Word(
@@ -336,7 +330,7 @@ impl<'a> Lexer<'a> {
                     }
                 },
                 "whitespace" => {
-                    if char_buffer.is_empty() == false {
+                    if !char_buffer.is_empty() {
                         lexemes.push(Lexeme::Word(
                             self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                             char_buffer.iter().collect()
@@ -345,7 +339,7 @@ impl<'a> Lexer<'a> {
                         char_buffer.clear();
                     }
 
-                    if number_buffer.is_empty() == false {
+                    if !number_buffer.is_empty() {
                         lexemes.push(Lexeme::Number(
                             self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
@@ -360,7 +354,7 @@ impl<'a> Lexer<'a> {
                     ));
                 },
                 "newline" => {
-                    if char_buffer.is_empty() == false {
+                    if !char_buffer.is_empty() {
                         lexemes.push(Lexeme::Word(
                             self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                             char_buffer.iter().collect()
@@ -369,7 +363,7 @@ impl<'a> Lexer<'a> {
                         char_buffer.clear();
                     }
 
-                    if number_buffer.is_empty() == false {
+                    if !number_buffer.is_empty() {
                         lexemes.push(Lexeme::Number(
                             self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
@@ -385,7 +379,7 @@ impl<'a> Lexer<'a> {
                     comment_can_start = true;
                 },
                 _ => {
-                    if char_buffer.is_empty() == false {
+                    if !char_buffer.is_empty() {
                         lexemes.push(Lexeme::Word(
                             self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                             char_buffer.iter().collect()
@@ -394,7 +388,7 @@ impl<'a> Lexer<'a> {
                         char_buffer.clear();
                     }
 
-                    if number_buffer.is_empty() == false {
+                    if !number_buffer.is_empty() {
                         lexemes.push(Lexeme::Number(
                             self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                             number_buffer.iter().collect()
@@ -413,7 +407,7 @@ impl<'a> Lexer<'a> {
         }
 
         // In case we have a char buffer that is not empty by the end.
-        if char_buffer.is_empty() == false {
+        if !char_buffer.is_empty() {
             lexemes.push(Lexeme::Word(
                 self.new_filepos(current_line, current_column - char_buffer.len() as i32),
                 char_buffer.iter().collect()
@@ -422,7 +416,7 @@ impl<'a> Lexer<'a> {
             char_buffer.clear();
         }
 
-        if number_buffer.is_empty() == false {
+        if !number_buffer.is_empty() {
             lexemes.push(Lexeme::Number(
                 self.new_filepos(current_line, current_column - number_buffer.len() as i32),
                 number_buffer.iter().collect()
@@ -454,7 +448,7 @@ pub fn lexemize_source_file(file: &PathBuf) -> LexemizationResult {
         Err(e) => return Err(ParseError::new(&format!("Could not read file: {:?}", e), Some(null_pos.clone()))),
     };
 
-    if source_string.len() < 1 {
+    if source_string.is_empty() {
         return Err(ParseError::new(&format!("Cannot parse empty file: `{:?}`", file), Some(null_pos.clone())));
     }
 

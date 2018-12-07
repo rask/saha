@@ -1,3 +1,9 @@
+//! Saha Core
+//!
+//! Contains the stdlib.
+
+#![allow(clippy::needless_return, clippy::redundant_field_names)]
+
 mod utils;
 pub mod stdlib;
 

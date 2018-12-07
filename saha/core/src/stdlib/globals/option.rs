@@ -3,28 +3,16 @@
 //! Anything related to the `Option<T>` type used for error and result
 //! management in Saha. Very similar to the `Option` type in Rust.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex}
-};
+use std::sync::Arc;
 
-use saha_lib::{
-    symbol_table::InstRef,
-    errors::{Error, RuntimeError},
-    source::files::FilePosition,
-    types::{
-        Value, SahaType,
-        objects::{ClassDefinition, AccessParams, Property, ObjProperties, SahaObject},
-        functions::{SahaCallable, SahaCallResult, ValidatesArgs, FunctionParameter, SahaFunctionParamDefs, SahaFunctionArguments}
-    }
-};
+use saha_lib::prelude::*;
 
 /// Create a new Option instance.
 pub fn new_instance(
     instref: InstRef,
-    args: SahaFunctionArguments,
-    type_params: &Vec<Box<SahaType>>,
-    additional_data: SahaFunctionArguments,
+    args: &SahaFunctionArguments,
+    type_params: &[Box<SahaType>],
+    additional_data: &SahaFunctionArguments,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 2 {
@@ -33,7 +21,7 @@ pub fn new_instance(
         return Err(err);
     }
 
-    if args.len() > 0 {
+    if !args.is_empty() {
         let err = RuntimeError::new("`Option` expects no arguments", create_pos);
 
         return Err(err);
@@ -72,7 +60,7 @@ pub struct SahaOption {
 
 impl SahaObject for SahaOption {
     fn get_instance_ref(&self) -> InstRef {
-        return self.instref.clone();
+        return self.instref;
     }
 
     fn is_core_defined(&self) -> bool {
@@ -91,11 +79,11 @@ impl SahaObject for SahaOption {
         return vec![];
     }
 
-    fn get_full_method_name(&mut self, method_name: &str) -> String {
+    fn get_full_method_name(&mut self, _method_name: &str) -> String {
         unimplemented!()
     }
 
-    fn get_method_ref(&mut self, method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError> {
+    fn get_method_ref(&mut self, _method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError> {
         unimplemented!()
     }
 
@@ -112,7 +100,7 @@ impl SahaObject for SahaOption {
         ));
     }
 
-    fn call_member(&mut self, access: AccessParams, args: SahaFunctionArguments) -> SahaCallResult {
+    fn call_member(&mut self, access: AccessParams, _args: SahaFunctionArguments) -> SahaCallResult {
         if access.is_static_access {
             match access.member_name as &str {
                 _ => Err(RuntimeError::new(
@@ -121,11 +109,12 @@ impl SahaObject for SahaOption {
                 ))
             }
         } else {
+            // FIXME arg validation missing
             match access.member_name as &str {
                 "isSome" => self.is_some(),
                 "isNone" => self.is_none(),
                 "unwrap" => {
-                    if self.is_some == false {
+                    if !self.is_some {
                         let err = RuntimeError::new(
                             "Attempted to unwrap a none value of an Option",
                             access.access_file_pos.clone()
@@ -146,11 +135,11 @@ impl SahaObject for SahaOption {
         }
     }
 
-    fn access_property(&self, access: AccessParams) -> SahaCallResult {
+    fn access_property(&self, _access: AccessParams) -> SahaCallResult {
         unimplemented!()
     }
 
-    fn mutate_property(&mut self, access: AccessParams, new_value: Value) -> SahaCallResult {
+    fn mutate_property(&mut self, _access: AccessParams, _new_value: Value) -> SahaCallResult {
         unimplemented!()
     }
 
@@ -162,7 +151,7 @@ impl SahaObject for SahaOption {
         unimplemented!()
     }
 
-    fn set_data_from_iter(&mut self, iterator: Box<Iterator<Item = (Value, Value)>>) {
+    fn set_data_from_iter(&mut self, _iterator: Box<Iterator<Item = (Value, Value)>>) {
         unimplemented!()
     }
 }
@@ -195,6 +184,6 @@ impl SahaOption {
 
     /// Is this option empty?
     pub fn is_none(&self) -> SahaCallResult {
-        return Ok(Value::bool(self.is_some == false));
+        return Ok(Value::bool(!self.is_some));
     }
 }

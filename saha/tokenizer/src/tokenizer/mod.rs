@@ -39,8 +39,8 @@ impl<'a> Tokenizer<'a> {
     pub fn new(lexemes: Vec<Lexeme>, main_file: &PathBuf, module_name: String) -> Tokenizer {
         return Tokenizer {
             main_file: main_file,
-            lexemes: lexemes,
-            module: module_name
+            module: module_name,
+            lexemes: lexemes
         };
     }
 
@@ -61,8 +61,8 @@ impl<'a> Tokenizer<'a> {
     /// ```text
     /// /my/pkg/src/my_module.saha
     /// ```
-    fn parse_import_path_names(&self, namepos: &FilePosition, name: String) -> Result<(String, Option<PathBuf>), ParseError> {
-        if name.contains('.') == false {
+    fn parse_import_path_names(&self, namepos: &FilePosition, name: &str) -> Result<(String, Option<PathBuf>), ParseError> {
+        if !name.contains('.') {
             return Err(ParseError::new("Invalid `use` member, must be namespaced", Some(namepos.to_owned())));
         }
 
@@ -81,7 +81,7 @@ impl<'a> Tokenizer<'a> {
             pkg_root.push(import_member_path);
             pkg_root.set_extension("saha");
 
-            if pkg_root.exists() == false {
+            if !pkg_root.exists() {
                 return Err(ParseError::new(&format!("Invalid `use`, file `{:?}` for `{}` does not exist", pkg_root, name), Some(namepos.to_owned())));
             }
 
@@ -93,7 +93,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Get the import type for an import name source string.
-    fn get_import_type(&self, import_source_string: &String) -> &str {
+    fn get_import_type(&self, import_source_string: &str) -> &str {
         if import_source_string.starts_with("pkg.") {
             return "pkg";
         } else if import_source_string.starts_with("std.") {
@@ -106,7 +106,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Parse use keywords to imports and alias names to imports.
-    fn parse_imports(&self, tokens: Vec<Token>, main_file: &PathBuf) -> TokenizationResult {
+    fn parse_imports(&self, tokens: &[Token], main_file: &PathBuf) -> TokenizationResult {
         let mut iterable = tokens.iter().peekable();
         let mut parsed: Vec<Token> = Vec::new();
         let mut previous_token: Option<Token> = None;
@@ -137,24 +137,22 @@ impl<'a> Tokenizer<'a> {
                         Token::Name(pos, _, source) => {
                             // `source` contains the whole import name
                             let import_type = self.get_import_type(&source);
-                            let import_name: String; // the member we're importing
-                            let mut import_alias: String; // alias with `as` possibly
-                            let import_path: Option<PathBuf>; // file path we're importing from
+                            let import_alias: String; // alias with `as` possibly
 
                             match import_type {
                                 "pkg" | "std" | "ext" => (), // "ok"
                                 _ => return Err(ParseError::new("Invalid import type encountered, expected `pkg`, `std`, or `ext`", Some(pos.to_owned())))
                             };
 
-                            let (import_name, import_path) = self.parse_import_path_names(&pos, source.to_string())?;
+                            let (import_name, import_path) = self.parse_import_path_names(&pos, source)?;
 
                             // we need to peek to make sure we have either a bare import or an
                             // aliased import, or perhaps a parse error
-                            let mut peeked_token: Option<Token>;
+                            let peeked_token: Option<Token>;
 
                             // do the following inside a block to keep reference lifetimes in tick
                             {
-                                peeked_token = match iterable.peek().clone() {
+                                peeked_token = match iterable.peek() {
                                     Some(t) => Some(t.to_owned().to_owned()),
                                     None => None
                                 };
@@ -255,7 +253,7 @@ impl<'a> Tokenizer<'a> {
 
                     if names_to_alias.contains_key(source) {
                         // this alters names to match imported module names
-                        let alias_to: String = names_to_alias.get(source).unwrap().to_string();
+                        let alias_to: String = names_to_alias[source].to_string();
 
                         Token::Name(copypos, alias_to, copysource)
                     } else {
@@ -264,9 +262,9 @@ impl<'a> Tokenizer<'a> {
                         match alias_previous {
                             Some(ref p) => {
                                 match p {
-                                    Token::KwFunction(ref f) |
-                                    Token::KwBehavior(ref f) |
-                                    Token::KwClass(ref f)  => {
+                                    Token::KwFunction(..) |
+                                    Token::KwBehavior(..) |
+                                    Token::KwClass(..)  => {
                                         let alias_to = format!("{}.{}", self.module, source);
 
                                         Token::Name(copypos, alias_to, copysource)
@@ -505,7 +503,7 @@ impl<'a> Tokenizer<'a> {
             prev_pos = Some(current_lexeme.get_file_position());
         }
 
-        let imports_parsed = self.parse_imports(tokens, self.main_file)?;
+        let imports_parsed = self.parse_imports(&tokens, self.main_file)?;
 
         return Ok(imports_parsed);
     }

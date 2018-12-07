@@ -2,21 +2,17 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex}
+    sync::Arc
 };
 
-use crate::{
-    symbol_table::InstRef,
-    errors::{Error, RuntimeError},
-    source::files::FilePosition,
-    types::{
-        Value, SahaType,
-        functions::{ValidatesArgs, SahaCallable, SahaFunctionArguments, SahaCallResult}
-    }
-};
+use crate::prelude::*;
+
+/// Helper type for core class constructors.
+pub type CoreConstructorFn = fn(instref: InstRef, args: &SahaFunctionArguments, param_types: &[Box<SahaType>], additional_data: &SahaFunctionArguments, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>;
 
 /// A helper struct for constructing object member access, either method or
 /// property.
+#[derive(Clone, Copy)]
 pub struct AccessParams<'a> {
     pub member_name: &'a str,
     pub is_static_access: bool,
@@ -267,7 +263,7 @@ impl ClassDefinition {
         &self,
         inst_ref: InstRef,
         args: SahaFunctionArguments,
-        typeparams: &Vec<Box<SahaType>>,
+        typeparams: &[Box<SahaType>],
         create_pos: &Option<FilePosition>
     ) -> Result<Box<dyn SahaObject>, RuntimeError> {
         if self.type_params.len() != typeparams.len() {
@@ -327,11 +323,18 @@ impl ClassDefinition {
     }
 }
 
-/// Behavior definition, name and the requires methods.
+/// Behavior definition, name and the required methods (no actual callable, just
+/// expected params and expected return type).
 pub struct BehaviorDefinition {
-    name: String,
-    fqname: String,
-    methods: HashMap<String, Box<SahaCallable>>
+    /// Plain behavior name.
+    pub name: String,
+
+    /// Fully qualified behavior name.
+    pub fqname: String,
+
+    /// Method collection. Keyed by method name, tuple contains param definitions for the method,
+    /// and the return type for the method.
+    pub methods: HashMap<String, (SahaFunctionParamDefs, Box<SahaType>)>
 }
 
 /// Class member visibility, e.g. public or private.
@@ -651,7 +654,7 @@ impl SahaObject for UserInstance {
         unimplemented!()
     }
 
-    fn set_data_from_iter(&mut self, iterator: Box<Iterator<Item = (Value, Value)>>) {
+    fn set_data_from_iter(&mut self, _iterator: Box<Iterator<Item = (Value, Value)>>) {
         unimplemented!()
     }
 }

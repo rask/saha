@@ -3,12 +3,13 @@
 //! Provides the main interpreter logic and clue code, tying together the
 //! language tooling to make it usable.
 
+#![allow(clippy::needless_return, clippy::redundant_field_names)]
+
 extern crate rustc_version;
 extern crate saha_tokenizer;
 extern crate saha_parser;
 extern crate saha_lib;
 extern crate saha_core;
-#[macro_use]
 extern crate structopt;
 
 mod cli;
@@ -24,10 +25,7 @@ use std::{
 use saha_lib::{
     source::files::FilePosition,
     errors::{Error, ParseError, RuntimeError},
-    types::{
-        Value,
-        functions::{SahaCallable, SahaCallResult, UserFunction}
-    }
+    types::functions::{SahaCallable, UserFunction}
 };
 
 use saha_tokenizer::tokenize;
@@ -43,7 +41,7 @@ use self::errors::{StartupError, StartupResult};
 /// -   File should exist in the filesystem
 /// -   File name should end with `.saha`
 fn validate_interpreter_entrypoint(entrypoint: &PathBuf) -> StartupResult {
-    if entrypoint.exists() == false {
+    if !entrypoint.exists() {
         return Err(StartupError::new("Invalid entrypoint file, does not exist", None));
     }
 
@@ -58,7 +56,7 @@ fn validate_interpreter_entrypoint(entrypoint: &PathBuf) -> StartupResult {
 fn parse_saha_source(args: &cli::InterpreterArgs) -> Result<(), ParseError> {
     let mut entrypoint = args.entrypoint.to_owned();
 
-    if entrypoint.is_absolute() == false {
+    if !entrypoint.is_absolute() {
         let dir = current_dir();
 
         match dir {
@@ -93,9 +91,9 @@ fn run_saha_main() -> Result<i32, RuntimeError> {
 
     {
         let st = saha_lib::SAHA_SYMBOL_TABLE.lock().unwrap();
-        let main_callable = st.functions.get("pkg.main").clone().unwrap();
+        let main_callable = st.functions["pkg.main"].clone();
 
-        mainfn = (**main_callable).as_userfunction().clone();
+        mainfn = (*main_callable).as_userfunction().clone();
     }
 
     let main_result = mainfn.call(HashMap::new(), None, Vec::new(), Some(FilePosition::unknown()))?;
@@ -107,7 +105,7 @@ fn run_saha_main() -> Result<i32, RuntimeError> {
 }
 
 /// Run the interpreter.
-fn run_interpreter(args: cli::InterpreterArgs) -> i32 {
+fn run_interpreter(args: &cli::InterpreterArgs) -> i32 {
     if args.entrypoint.to_str().unwrap() == "" {
         eprintln!("{}", StartupError::new("Please provide a Saha source file", None).format());
         return 1;
@@ -182,10 +180,10 @@ fn run_version() -> i32 {
 pub fn run() -> i32 {
     let args: cli::InterpreterArgs = cli::get_cli_arguments();
 
-    if args.version == true {
+    if args.version {
         return run_version();
     } else {
-        return run_interpreter(args);
+        return run_interpreter(&args);
     }
 }
 

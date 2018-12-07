@@ -4,28 +4,17 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex}
+    sync::Arc
 };
 
-use saha_lib::{
-    symbol_table::InstRef,
-    errors::{Error, RuntimeError},
-    source::files::FilePosition,
-    types::{
-        Value, SahaType,
-        objects::{ClassDefinition, AccessParams, Property, ObjProperties, SahaObject},
-        functions::{SahaCallable, SahaCallResult, SahaFunctionArguments, ValidatesArgs, SahaFunctionParamDefs, FunctionParameter}
-    }
-};
-
-use crate::stdlib::globals::option::SahaOption;
+use saha_lib::prelude::*;
 
 /// Create a new List instance.
 pub fn new_instance(
     instref: InstRef,
-    args: SahaFunctionArguments,
-    type_params: &Vec<Box<SahaType>>,
-    additional_data: SahaFunctionArguments,
+    args: &SahaFunctionArguments,
+    type_params: &[Box<SahaType>],
+    additional_data: &SahaFunctionArguments,
     create_pos: Option<FilePosition>
 ) -> Result<Box<dyn SahaObject>, RuntimeError> {
     if type_params.len() != 1 {
@@ -34,19 +23,17 @@ pub fn new_instance(
         return Err(err);
     }
 
-    if args.len() > 0 {
+    if !args.is_empty() {
         let err = RuntimeError::new("`List` expects no arguments", create_pos);
 
         return Err(err);
     }
 
-    let initial_data: Vec<Value>;
-
-    if additional_data.is_empty() {
-        initial_data = vec![];
+    let initial_data = if additional_data.is_empty() {
+        vec![]
     } else {
-        initial_data = additional_data.iter().map(|(_, i)| i.clone()).collect();
-    }
+        additional_data.iter().map(|(_, i)| i.clone()).collect()
+    };
 
     let list_inst = Box::new(SahaList {
         param_type: type_params[0].clone(),
@@ -69,7 +56,7 @@ struct SahaList {
 
 impl SahaObject for SahaList {
     fn get_instance_ref(&self) -> InstRef {
-        return self.instref.clone();
+        return self.instref;
     }
 
     fn is_core_defined(&self) -> bool {
@@ -88,11 +75,11 @@ impl SahaObject for SahaList {
         return vec![];
     }
 
-    fn get_full_method_name(&mut self, method_name: &str) -> String {
+    fn get_full_method_name(&mut self, _method_name: &str) -> String {
         unimplemented!()
     }
 
-    fn get_method_ref(&mut self, method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError> {
+    fn get_method_ref(&mut self, _method_name: &str) -> Result<Arc<Box<dyn SahaCallable>>, RuntimeError> {
         unimplemented!()
     }
 
@@ -115,12 +102,9 @@ impl SahaObject for SahaList {
             ));
         }
 
-        let list_type = self.get_type_params()[0].1.clone();
-
         match access.member_name as &str {
-            // FIXME struct state does not seem to pass trait boundary here
-            "push" => self.push(args, access),
-            "count" => self.count(args, access),
+            "push" => self.push(&args, access),
+            "count" => self.count(&args, access),
             _ => {
                 return Err(RuntimeError::new(
                     &format!("No method `{}` defined for `{}`", access.member_name, self.get_class_name()),
@@ -130,11 +114,11 @@ impl SahaObject for SahaList {
         }
     }
 
-    fn access_property(&self, access: AccessParams) -> SahaCallResult {
+    fn access_property(&self, _access: AccessParams) -> SahaCallResult {
         unimplemented!()
     }
 
-    fn mutate_property(&mut self, access: AccessParams, new_value: Value) -> SahaCallResult {
+    fn mutate_property(&mut self, _access: AccessParams, _new_value: Value) -> SahaCallResult {
         unimplemented!()
     }
 
@@ -166,7 +150,7 @@ impl SahaList {
     }
 
     /// The List::push "method".
-    pub fn push(&mut self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+    pub fn push(&mut self, args: &SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
         self.push_params().validate_args(&args, access.access_file_pos)?;
 
         let pushed_val = args.get("value").unwrap();
@@ -177,7 +161,7 @@ impl SahaList {
     }
 
     /// The List::count "method".
-    pub fn count(&self, args: SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
+    pub fn count(&self, args: &SahaFunctionArguments, access: AccessParams) -> SahaCallResult {
         let params: SahaFunctionParamDefs = HashMap::new(); // no params
 
         params.validate_args(&args, access.access_file_pos)?;

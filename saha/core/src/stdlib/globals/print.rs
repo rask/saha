@@ -1,17 +1,8 @@
-use std::collections::HashMap;
+//! stdlib Printing
+//!
+//! Generic output helpers.
 
-use saha_lib::{
-    errors::RuntimeError,
-    types::{
-        Value, SahaType,
-        functions::{
-            CoreFunction,
-            SahaFunctionArguments,
-            SahaCallResult,
-            FunctionParameter,
-        }
-    }
-};
+use saha_lib::prelude::*;
 
 use crate::utils::create_core_function;
 
@@ -75,7 +66,7 @@ pub fn get_saha_functions() -> Vec<(String, CoreFunction)> {
 }
 
 fn print(args: SahaFunctionArguments) -> SahaCallResult {
-    let to_print = args.get("text").unwrap().clone().str.unwrap();
+    let to_print = args["text"].clone().str.unwrap();
 
     print!("{}", to_print);
 
@@ -83,7 +74,7 @@ fn print(args: SahaFunctionArguments) -> SahaCallResult {
 }
 
 fn print_line(args: SahaFunctionArguments) -> SahaCallResult {
-    let to_print = args.get("text").unwrap().clone().str.unwrap();
+    let to_print = args["text"].clone().str.unwrap();
 
     println!("{}", to_print);
 
@@ -91,7 +82,7 @@ fn print_line(args: SahaFunctionArguments) -> SahaCallResult {
 }
 
 fn print_err(args: SahaFunctionArguments) -> SahaCallResult {
-    let to_print = args.get("text").unwrap().clone().str.unwrap();
+    let to_print = args["text"].clone().str.unwrap();
 
     eprint!("{}", to_print);
 
@@ -99,7 +90,7 @@ fn print_err(args: SahaFunctionArguments) -> SahaCallResult {
 }
 
 fn print_err_line(args: SahaFunctionArguments) -> SahaCallResult {
-    let to_print = args.get("text").unwrap().clone().str.unwrap();
+    let to_print = args["text"].clone().str.unwrap();
 
     eprintln!("{}", to_print);
 

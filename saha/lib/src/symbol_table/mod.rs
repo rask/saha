@@ -6,28 +6,19 @@
 //! All declarations and globals are stored in the symbol table.
 
 use std::{
-    any::Any,
     collections::HashMap,
     sync::{Arc, Mutex}
 };
 
 use uuid::Uuid;
 
-use crate::{
-    errors::{Error, ParseError, RuntimeError},
-    source::files::FilePosition,
-    types::{
-        Value, SahaType,
-        functions::{SahaCallable, SahaFunctionArguments},
-        objects::{SahaObject, ClassDefinition, BehaviorDefinition}
-    }
+use crate::prelude::*;
+use crate::types::objects::{
+    BehaviorDefinition,
+    ClassDefinition,
+    CoreConstructorFn
 };
 
-/// UUID as bytes
-pub type InstRef = [u8; 16];
-
-/// Helper type for core class constructors.
-pub type CoreConstructorFn = fn(instref: InstRef, args: SahaFunctionArguments, param_types: &Vec<Box<SahaType>>, additional_data: SahaFunctionArguments, create_pos: Option<FilePosition>) -> Result<Box<dyn SahaObject>, RuntimeError>;
 
 /// Symbol table, stores global parsed declarations and definitions, in addition
 /// to references to things that should be available globally.
@@ -86,9 +77,8 @@ pub struct SymbolTable {
     pub instances: HashMap<InstRef, Arc<Mutex<Box<dyn SahaObject>>>>,
 }
 
-impl SymbolTable {
-    /// Return a new and empty symbol table.
-    pub fn new() -> SymbolTable {
+impl Default for SymbolTable {
+    fn default() -> SymbolTable {
         return SymbolTable {
             constants: HashMap::new(),
             functions: HashMap::new(),
@@ -98,6 +88,13 @@ impl SymbolTable {
             methods: HashMap::new(),
             instances: HashMap::new(),
         };
+    }
+}
+
+impl SymbolTable {
+    /// Return a new and empty symbol table.
+    pub fn new() -> SymbolTable {
+        return SymbolTable::default();
     }
 
     /// Set the symbol table constants collection.
@@ -114,7 +111,7 @@ impl SymbolTable {
     }
 
     /// Add a new method.
-    pub fn add_method(&mut self, class_name: &String, method: &Box<dyn SahaCallable>) {
+    pub fn add_method(&mut self, class_name: &str, method: &Box<dyn SahaCallable>) {
         let method_name = method.get_name().clone();
         let fq_method_name = format!("{}#{}", class_name, method_name);
 
@@ -125,17 +122,17 @@ impl SymbolTable {
     /// instref value.
     pub fn create_object_instance(
         &mut self,
-        class_name: String,
+        class_name: &str,
         args: SahaFunctionArguments,
-        type_params: &Vec<Box<SahaType>>,
+        type_params: &[Box<SahaType>],
         additional_data: SahaFunctionArguments,
         create_pos: &Option<FilePosition>
     ) -> Result<Value, RuntimeError> {
-        let def: Option<&ClassDefinition> = self.classes.get(&class_name);
+        let def: Option<&ClassDefinition> = self.classes.get(class_name);
 
         if def.is_none() {
             // no userland definition found, attempt newup for a core instance
-            let core_inst = self.create_core_object_instance(class_name, args, type_params, additional_data, create_pos);
+            let core_inst = self.create_core_object_instance(&class_name, args, type_params, additional_data, create_pos);
 
             if core_inst.is_err() {
                 return Err(core_inst.err().unwrap());
@@ -160,15 +157,15 @@ impl SymbolTable {
     /// Create a core object instance, e.g. List, Dictionary, etc.
     fn create_core_object_instance(
         &mut self,
-        class_name: String,
+        class_name: &str,
         args: SahaFunctionArguments,
-        type_params: &Vec<Box<SahaType>>,
+        type_params: &[Box<SahaType>],
         additional_data: SahaFunctionArguments,
         create_pos: &Option<FilePosition>
     ) -> Result<InstRef, RuntimeError> {
         let instref = Self::get_new_uuid_bytes();
 
-        let def = self.core_classes.get(&class_name);
+        let def = self.core_classes.get(class_name);
 
         if def.is_none() {
             let err = RuntimeError::new(&format!("Cannot create instance of unknown class `{}`", class_name), create_pos.to_owned());
@@ -176,7 +173,7 @@ impl SymbolTable {
             return Err(err);
         }
 
-        let inst_result: Result<Box<dyn SahaObject>, RuntimeError> = (def.unwrap())(instref, args, type_params, additional_data, create_pos.clone());
+        let inst_result: Result<Box<dyn SahaObject>, RuntimeError> = (def.unwrap())(instref, &args, type_params, &additional_data, create_pos.clone());
 
         match inst_result {
             Ok(inst) => {

@@ -5,6 +5,8 @@
 //! all filepath includes (`use` statements) are inlined and aliased properly
 //! to generate a flat token stream for the Saha parser to operate on.
 
+#![allow(clippy::needless_return, clippy::redundant_field_names)]
+
 extern crate saha_lib;
 extern crate noisy_float;
 
@@ -12,7 +14,6 @@ mod lexer;
 mod tokenizer;
 
 use std::{
-    env::current_dir,
     collections::HashMap,
     path::PathBuf
 };
@@ -89,7 +90,7 @@ pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
             continue;
         }
 
-        let mut tokens_to_append = tokenized_files.get(p).unwrap().to_owned();
+        let mut tokens_to_append = tokenized_files[p].clone();
 
         // remove the now useless file import tokens
         tokens_to_append = tokens_to_append.into_iter().filter(|tok| {
@@ -114,6 +115,7 @@ pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env::current_dir;
     use saha_lib::source::files::FilePosition;
 
     fn get_test_sample_file(sample_path: &str) -> PathBuf {

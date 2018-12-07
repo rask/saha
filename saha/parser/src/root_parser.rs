@@ -10,22 +10,8 @@ use std::{
     mem::discriminant,
 };
 
-use saha_lib::{
-    errors::{
-        Error,
-        ParseError
-    },
-    source::{
-        files::FilePosition,
-        token::Token,
-    },
-    types::{
-        SahaType,
-        Value,
-        objects::{MemberVisibility},
-        functions::{FunctionParameter, SahaFunctionParamDefs}
-    }
-};
+use saha_lib::prelude::*;
+use saha_lib::source::token::Token;
 
 use crate::{
     parse_table::{
@@ -41,6 +27,8 @@ use crate::{
         ParsesTokens
     }
 };
+
+type ClassBodyDefinition = (HashMap<String, PropertyDefinition>, HashMap<String, FunctionDefinition>, Vec<String>);
 
 /// RootParser, which parses root level declarations from tokens. Means we use
 /// this to parse constants, classes, behaviors, and functions, while not
@@ -60,7 +48,7 @@ impl<'a> ParsesTokens for RootParser<'a> {
             self.get_dummy_token_type(a)
         }).collect();
 
-        self.ptok = self.ctok.clone();
+        self.ptok = self.ctok;
         self.ctok = self.tokens.next();
 
         if self.ctok.is_none() {
@@ -86,7 +74,7 @@ impl<'a> ParsesTokens for RootParser<'a> {
         if next.is_none() {
             self.ntok = None;
         } else {
-            self.ntok = Some(next.unwrap().clone());
+            self.ntok = next.cloned();
         }
 
         self.advance_token_index();
@@ -95,7 +83,7 @@ impl<'a> ParsesTokens for RootParser<'a> {
     }
 
     fn consume_any(&mut self) -> PR<()> {
-        self.ptok = self.ctok.clone();
+        self.ptok = self.ctok;
         self.ctok = self.tokens.next();
 
         if self.ctok.is_none() {
@@ -114,7 +102,7 @@ impl<'a> ParsesTokens for RootParser<'a> {
         if next.is_none() {
             self.ntok = None;
         } else {
-            self.ntok = Some(next.unwrap().clone());
+            self.ntok = next.cloned();
         }
 
         self.advance_token_index();
@@ -128,7 +116,7 @@ impl<'a> ParsesTokens for RootParser<'a> {
 }
 
 impl<'a> RootParser<'a> {
-    pub fn new(tokens: &'a Vec<Token>, parse_table: &'a mut ParseTable) -> RootParser<'a> {
+    pub fn new(tokens: &'a [Token], parse_table: &'a mut ParseTable) -> RootParser<'a> {
         return RootParser {
             ctok: None,
             ptok: None,
@@ -452,7 +440,7 @@ impl<'a> RootParser<'a> {
         return self.parse_root();
     }
 
-    fn validate_constant_name(&mut self, const_name: String, name_pos: &FilePosition) -> PR<()> {
+    fn validate_constant_name(&mut self, const_name: &str, name_pos: &FilePosition) -> PR<()> {
         let acceptable = [
             '_', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
             'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
@@ -460,7 +448,7 @@ impl<'a> RootParser<'a> {
         ];
 
         let is_valid: bool = const_name.chars().fold(true, |mut valid_char, c| {
-            if valid_char == false {
+            if !valid_char {
                 return valid_char;
             }
 
@@ -469,7 +457,7 @@ impl<'a> RootParser<'a> {
             return valid_char;
         });
 
-        if is_valid == false {
+        if !is_valid {
             return Err(ParseError::new(
                 "Invalid constant name, constants should be defined using `A-Z0-9` and unsderscores.",
                 Some(name_pos.to_owned())
@@ -488,7 +476,7 @@ impl<'a> RootParser<'a> {
             _ => unreachable!()
         };
 
-        self.validate_constant_name(const_name.to_owned(), const_name_pos)?;
+        self.validate_constant_name(const_name, const_name_pos)?;
 
         self.consume_next(vec!["'"])?;
         self.consume_next(vec!["str", "bool", "int", "float"])?; // consts dont accept names or refs
@@ -565,7 +553,7 @@ impl<'a> RootParser<'a> {
     }
 
     /// Validate a parameter type name (should be a single uppercase char).
-    fn validate_paramtype_name(&self, name: &String) -> bool {
+    fn validate_paramtype_name(&self, name: &str) -> bool {
         if name.len() != 1 {
             return false;
         }
@@ -584,7 +572,6 @@ impl<'a> RootParser<'a> {
 
         self.consume_next(vec!["<"])?;
 
-        let ptype_def_position = self.ctok.unwrap().get_file_position();
         let mut existing: Vec<char> = vec![];
 
         loop {
@@ -595,7 +582,7 @@ impl<'a> RootParser<'a> {
                 _ => unreachable!()
             };
 
-            if self.validate_paramtype_name(&type_char) == false {
+            if !self.validate_paramtype_name(&type_char) {
                 return Err(ParseError::new(
                     &format!("Invalid type parameter name `{}`", type_char),
                     Some(type_pos.clone())
@@ -631,8 +618,7 @@ impl<'a> RootParser<'a> {
     }
 
     /// Parse the contents of a class declaration. Methods, props, implements.
-    fn parse_class_body(&mut self)
-        -> PR<(HashMap<String, PropertyDefinition>, HashMap<String, FunctionDefinition>, Vec<String>)> {
+    fn parse_class_body(&mut self) -> PR<ClassBodyDefinition> {
         let mut props: HashMap<String, PropertyDefinition> = HashMap::new();
         let mut methods: HashMap<String, FunctionDefinition> = HashMap::new();
         let mut implements: Vec<String> = Vec::new();

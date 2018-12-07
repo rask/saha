@@ -1,12 +1,9 @@
 //! Saha AST definition
 
-use std::{
-    fmt::{
-        Debug,
-        Formatter as FmtFormatter,
-        Result as FmtResult
-    },
-    collections::HashMap
+use std::fmt::{
+    Debug,
+    Formatter as FmtFormatter,
+    Result as FmtResult
 };
 
 use crate::{
@@ -111,22 +108,11 @@ pub struct Identifier {
     pub type_params: Vec<Box<SahaType>>
 }
 
-impl Identifier {
-    fn has_type_params(&self) -> bool {
-        return self.type_params.is_empty() == false;
-    }
-}
-
 /// Expressions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expression {
     pub file_position: FilePosition,
     pub kind: ExpressionKind,
-}
-
-/// Stack of expressions, used for operator precedence parsing.
-pub struct ExpressionStack {
-    expressions: Vec<Box<Expression>>
 }
 
 /// Expression kinds.
