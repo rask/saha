@@ -21,8 +21,3 @@ pub struct InterpreterArgs {
 pub fn get_cli_arguments() -> InterpreterArgs {
     return InterpreterArgs::from_args();
 }
-
-#[cfg(test)]
-mod tests {
-    // TODO
-}

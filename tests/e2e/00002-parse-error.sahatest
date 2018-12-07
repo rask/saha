@@ -1,0 +1,9 @@
+-----BEGIN SOURCE-----
+var foo = 1;
+-----BEGIN OUTPUT-----
+Unexpected `ParseError`
+at saha://stdin:3:9
+Unexpected token `"Assignment"`, expected one of `["\'"]`
+
+-----BEGIN STATUS-----
+1

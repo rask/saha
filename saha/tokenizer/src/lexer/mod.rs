@@ -448,11 +448,23 @@ pub fn lexemize_source_file(file: &PathBuf) -> LexemizationResult {
         Err(e) => return Err(ParseError::new(&format!("Could not read file: {:?}", e), Some(null_pos.clone()))),
     };
 
+    return lexemize_source_code(source_string, file);
+}
+
+/// Lexemize source code. Pass in a file pathbuf, but it can be a non-file as well (i.e. when
+/// receiving STDIN).
+pub fn lexemize_source_code(source_string: String, path: &PathBuf) -> LexemizationResult {
+    let null_pos = FilePosition {
+        path: path.to_owned(),
+        line: 0,
+        column: 0
+    };
+
     if source_string.is_empty() {
-        return Err(ParseError::new(&format!("Cannot parse empty file: `{:?}`", file), Some(null_pos.clone())));
+        return Err(ParseError::new(&format!("Cannot parse empty file: `{:?}`", path), Some(null_pos.clone())));
     }
 
-    let mut lexer = Lexer::new(&file, source_string);
+    let mut lexer = Lexer::new(&path, source_string);
 
     return lexer.get_lexemes();
 }

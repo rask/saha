@@ -1,0 +1,6 @@
+-----BEGIN SOURCE-----
+print("Hello, world!");
+-----BEGIN OUTPUT-----
+Hello, world!
+-----BEGIN STATUS-----
+0

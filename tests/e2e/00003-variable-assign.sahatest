@@ -1,0 +1,7 @@
+-----BEGIN SOURCE-----
+var foo'int = 1;
+var bar'str = "hello world";
+-----BEGIN OUTPUT-----
+
+-----BEGIN STATUS-----
+0

@@ -7,16 +7,17 @@
 
 #![allow(clippy::needless_return, clippy::redundant_field_names)]
 
-extern crate saha_lib;
-extern crate noisy_float;
-
 mod lexer;
 mod tokenizer;
 
 use std::{
+    fs::File,
+    io::Write,
     collections::HashMap,
     path::PathBuf
 };
+
+use tempfile;
 
 use saha_lib::{
     errors::{Error, ParseError},
@@ -28,16 +29,16 @@ use saha_lib::{
 
 use crate::{
     tokenizer::tokenize_lexemes,
-    lexer::lexemize_source_file
+    lexer::{lexemize_source_file, lexemize_source_code, Lexeme}
 };
 
 /// Tokenize a Saha source file with imports.
-pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
+pub fn tokenize(parsed_lexemes: Vec<Lexeme>, file: &PathBuf) -> Result<Vec<Token>, ParseError> {
     let mut tokenized_files: HashMap<PathBuf, Vec<Token>> = HashMap::new();
     let mut already_tokenized_paths: Vec<PathBuf> = Vec::new();
     let mut path_to_tokenize: PathBuf;
 
-    let mut lexemes = lexemize_source_file(file)?;
+    let mut lexemes = parsed_lexemes;
     let mut tokens: Vec<Token> = tokenize_lexemes(lexemes, file, String::from("pkg"))?;
 
     already_tokenized_paths.push(file.to_owned());
@@ -110,6 +111,24 @@ pub fn tokenize(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
     }
 
     return Ok(flattened_tokens);
+}
+
+/// Tokenize a source file.
+pub fn tokenize_file(file: &PathBuf) -> Result<Vec<Token>, ParseError> {
+    let lexemes = lexemize_source_file(file)?;
+
+    return tokenize(lexemes, file);
+}
+
+/// Allows tokenizing a raw source code string, by creating a tempfile for it.
+///
+/// This function is a helper for usecases where someone wants to just pipe in
+/// short scripts through the process STDIN.
+pub fn tokenize_raw_source_code(source: String) -> Result<Vec<Token>, ParseError> {
+    let imaginary_path = PathBuf::from("saha://stdin");
+    let lexemes = lexemize_source_code(source, &imaginary_path)?;
+
+    return tokenize(lexemes, &imaginary_path);
 }
 
 #[cfg(test)]

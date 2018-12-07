@@ -2,8 +2,6 @@
 //!
 //! This is the Saha language interpreter.
 
-extern crate saha_interpreter;
-
 use std::process::exit;
 use saha_interpreter::run;
 

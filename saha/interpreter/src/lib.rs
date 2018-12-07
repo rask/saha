@@ -19,7 +19,8 @@ use std::{
     collections::HashMap,
     env::current_dir,
     ffi::OsString,
-    path::PathBuf
+    path::PathBuf,
+    io::{self, Read}
 };
 
 use saha_lib::{
@@ -28,11 +29,11 @@ use saha_lib::{
     types::functions::{SahaCallable, UserFunction}
 };
 
-use saha_tokenizer::tokenize;
+use saha_tokenizer::{tokenize_file, tokenize_raw_source_code};
 use saha_parser::parse_tokens;
 use saha_core::register_core;
 
-use self::errors::{StartupError, StartupResult};
+use crate::errors::{StartupError, StartupResult};
 
 /// Validate if the given interpreter entrypoint file is a valid file for usage.
 ///
@@ -70,7 +71,7 @@ fn parse_saha_source(args: &cli::InterpreterArgs) -> Result<(), ParseError> {
         };
     }
 
-    let tokenized_source = tokenize(&entrypoint)?;
+    let tokenized_source = tokenize_file(&entrypoint)?;
 
     // Parse tokens into declarations and definitions into the global symbol table.
     parse_tokens(&tokenized_source)?;
@@ -104,8 +105,70 @@ fn run_saha_main() -> Result<i32, RuntimeError> {
     return Ok(return_code as i32);
 }
 
+/// Attempt to read Saha source code piped in through the STDIN.
+fn try_to_read_source_from_stdin() -> Option<String> {
+    let mut buffer = String::new();
+    let read_result = io::stdin().read_to_string(&mut buffer);
+
+    if read_result.is_err() {
+        return None;
+    }
+
+    if buffer.len() > 0 {
+        return Some(buffer);
+    }
+
+    return None;
+}
+
+/// Run the interpreter for simple scripts piped in through STDIN.
+fn run_stdin_interpreter(source: String) -> i32 {
+    let tokenized_source = tokenize_raw_source_code(source);
+
+    if tokenized_source.is_err() {
+        eprintln!("{}", tokenized_source.err().unwrap().format());
+        return 1;
+    }
+
+    let tokenized_source = tokenized_source.ok().unwrap();
+
+    // Parse tokens into declarations and definitions into the global symbol table.
+    let parse_result = parse_tokens(&tokenized_source);
+
+    if parse_result.is_err() {
+        eprintln!("{}", parse_result.err().unwrap().format());
+        return 1;
+    }
+
+    // At this point we should have core and extensions loaded, and we also have read, tokenized,
+    // and parsed our Saha source code. The symbol table is ready and now we just need to call the
+    // application main().
+    let run_result = run_saha_main();
+
+    if run_result.is_err() {
+        eprintln!("{}", run_result.err().unwrap().format());
+        return 1;
+    }
+
+    return run_result.ok().unwrap();
+}
+
 /// Run the interpreter.
 fn run_interpreter(args: &cli::InterpreterArgs) -> i32 {
+    let core_loaded = load_saha_core();
+
+    if core_loaded.is_err() {
+        eprintln!("{}", core_loaded.err().unwrap().format());
+        return 1;
+    }
+
+    let stdin_source = try_to_read_source_from_stdin();
+
+    // Got input via STDIN, work with that and disregard the rest.
+    if stdin_source.is_some() {
+        return run_stdin_interpreter(stdin_source.unwrap());
+    }
+
     if args.entrypoint.to_str().unwrap() == "" {
         eprintln!("{}", StartupError::new("Please provide a Saha source file", None).format());
         return 1;
@@ -115,13 +178,6 @@ fn run_interpreter(args: &cli::InterpreterArgs) -> i32 {
 
     if entrypoint_validation_result.is_err() {
         eprintln!("{}", entrypoint_validation_result.err().unwrap().format());
-        return 1;
-    }
-
-    let core_loaded = load_saha_core();
-
-    if core_loaded.is_err() {
-        eprintln!("{}", core_loaded.err().unwrap().format());
         return 1;
     }
 
@@ -169,7 +225,7 @@ fn run_version() -> i32 {
 /// interpreter entrypoint to a tokenizer, which in turn is parsed into
 /// declarations and those are refined into sub-ASTs which are used to make the
 /// interpretation itself work. After this we load the core, after which we are
-/// ready to run interpretation.
+/// ready to run interpretatextern crate saha_interpreter;ion.
 ///
 /// We do parsing before loading core to make it fail faster in case of parse
 /// errors or other logical errors that developers in userland may have

@@ -1,0 +1,10 @@
+[package]
+name = "saha_testbench"
+version = "0.1.0"
+authors = ["Otto Rask"]
+edition = "2018"
+
+[dependencies]
+structopt = "0.2"
+glob = "0.2"
+regex = "1.*"
