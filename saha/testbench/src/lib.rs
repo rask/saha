@@ -102,7 +102,7 @@ pub fn run() -> i32 {
 
     println!("Running Saha end-to-end testbench with {} test cases", test_cases.len());
 
-    let mut test_runner: TestRunner = TestRunner::new(test_cases, args.binary);
+    let mut test_runner: TestRunner = TestRunner::new(test_cases, args.command);
 
     test_runner.run();
 

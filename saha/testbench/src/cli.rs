@@ -5,12 +5,12 @@ use structopt::StructOpt;
 #[derive(StructOpt, Debug)]
 #[structopt(name = "saha_testbench")]
 pub struct CliArgs {
-    /// The Saha interpreter binary to test.
-    #[structopt(name = "BINARY", parse(from_os_str))]
-    pub binary: PathBuf,
+    /// The Saha interpreter binary/command to test.
+    #[structopt(long = "command")]
+    pub command: String,
 
     /// Test case file, or a directory containing test case files.
-    #[structopt(name = "FILE", parse(from_os_str))]
+    #[structopt(long = "test", parse(from_os_str))]
     pub test: PathBuf,
 
     #[structopt(long = "allow-failure")]

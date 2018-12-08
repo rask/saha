@@ -3,7 +3,7 @@
 use std::{
     path::PathBuf,
     io::Write,
-    process::{exit, Stdio, ChildStdin, Command}
+    process::{exit, Stdio, Command}
 };
 
 use crate::testcase::{
@@ -15,34 +15,28 @@ use crate::testcase::{
 /// against them.
 pub struct TestRunner {
     test_cases: TestCaseCollection,
-    binary: BinRunner,
+    command: BinRunner,
     pub success: bool,
     failures: Vec<TestResult>
 }
 
 impl TestRunner {
     /// Test the binary exists and is operable.
-    pub fn test_binary(binary: PathBuf) -> PathBuf {
-        if binary.exists() {
-            return binary;
-        }
-
-        eprintln!("Cannot test inexistent Saha binary");
-
-        exit(1);
+    pub fn test_command(command: String) -> String {
+        return command;
     }
 
     /// Create a new TestRunner.
-    pub fn new(test_cases: TestCaseCollection, binary: PathBuf) -> TestRunner {
-        let binary = TestRunner::test_binary(binary);
+    pub fn new(test_cases: TestCaseCollection, command: String) -> TestRunner {
+        let command = TestRunner::test_command(command);
 
         let bin_runner = BinRunner {
-            binary: binary
+            command: command
         };
 
         return TestRunner {
             test_cases: test_cases,
-            binary: bin_runner,
+            command: bin_runner,
             failures: Vec::new(),
             success: false,
         };
@@ -61,7 +55,7 @@ impl TestRunner {
         let mut fails = Vec::new();
 
         for c in cases {
-            let result = self.binary.run(c);
+            let result = self.command.run(c);
 
             if result.success {
                 print!(".");
@@ -139,12 +133,24 @@ pub struct TestResult {
 
 /// Binary runner.
 struct BinRunner {
-    binary: PathBuf
+    command: String
 }
 
 impl BinRunner {
     pub fn run(&self, test_case: TestCase) -> TestResult {
-        let mut cmd = Command::new(&self.binary)
+        let test_cmd = self.command.clone();
+
+        let mut cmd_parts: Vec<&str> = test_cmd.split(' ').collect();
+
+        let cmd_first = cmd_parts.remove(0);
+
+        let mut cmd_src = Command::new(cmd_first);
+
+        for p in cmd_parts {
+            cmd_src.arg(p);
+        }
+
+        let mut cmd = cmd_src
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
