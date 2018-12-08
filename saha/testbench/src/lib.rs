@@ -65,7 +65,7 @@ fn load_test_case_files(root: PathBuf) -> Result<Vec<PathBuf>, ()> {
         }
 
         test_files = test_files_maybe.ok().unwrap().map(|p| p.unwrap()).collect::<Vec<_>>();
-    } else if root.is_file() && root.ends_with(".sahatest") {
+    } else if root.is_file() {
         test_files.push(root);
     } else {
         eprintln!("Could not load test file, is it a `.sahatest` file and readable?");
