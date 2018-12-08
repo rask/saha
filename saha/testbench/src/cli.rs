@@ -15,6 +15,11 @@ pub struct CliArgs {
 
     #[structopt(long = "allow-failure")]
     pub allow_failure: bool,
+
+    /// Whether to use threading to make the tests run faster. Disable when
+    /// using kcov and similar coverage reporting tools.
+    #[structopt(long = "use-threading")]
+    pub use_threading: bool
 }
 
 /// Get command line arguments given to the interpreter.

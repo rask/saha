@@ -100,9 +100,9 @@ pub fn run() -> i32 {
 
     let test_cases: TestCaseCollection = parse_files_to_test_cases(test_files);
 
-    println!("Running Saha end-to-end testbench with {} test cases", test_cases.len());
+    println!("Running Saha end-to-end testbench with {} test cases (threading: {})", test_cases.len(), args.use_threading);
 
-    let mut test_runner: TestRunner = TestRunner::new(test_cases, args.command);
+    let mut test_runner: TestRunner = TestRunner::new(test_cases, args.command, args.use_threading);
 
     test_runner.run();
 

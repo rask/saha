@@ -1,0 +1,10 @@
+-----BEGIN SOURCE-----
+if (false) {
+    print("broken");
+} else {
+    print("works");
+}
+-----BEGIN OUTPUT-----
+works
+-----BEGIN STATUS-----
+0
