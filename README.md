@@ -309,7 +309,7 @@ management and recovery is forced upon the calling party, who can then decide
 whether to handle the error value or pass it on as an error.
 
 ```saha
-function my_func() : Result<int, str>
+function my_func() Result<int, str>
 {
     var res'Result<int, str> = new Result<int, str>();
 
