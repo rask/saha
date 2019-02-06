@@ -388,4 +388,4 @@ class AnotherClass()
 
 ## License
 
-> To be decided.
+MIT License. See `LICENSE.md`.
