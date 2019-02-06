@@ -338,11 +338,11 @@ This is very similar to how Rust and Go use result values in error handling.
 
 Saha supports splitting code into multiple files and directories.
 
-In `main.saha`:
+In `/path/to/project/src/main.saha`:
 
 ```saha
-use my_module.SubmoduleClass;
-use another.submodule.AnotherClass as AC;
+use pkg.my_module.SubmoduleClass; // `pkg` marks the root of the project which contains the `main.saha` file
+use pkg.another.submodule.AnotherClass as AC;
 
 function main() int
 {
@@ -353,7 +353,7 @@ function main() int
 }
 ```
 
-In `my_module.saha`:
+In `/path/to/project/src/my_module.saha`:
 
 ```saha
 class SubmoduleClass
@@ -365,7 +365,7 @@ class SubmoduleClass
 }
 ```
 
-In `another/submodule.saha`:
+In `/path/to/project/src/another/submodule.saha`:
 
 ```saha
 class AnotherClass()
